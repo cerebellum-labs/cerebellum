@@ -1,11 +1,19 @@
-import { Button } from '@/components/ui/button'
+import { Navigate, Route, Routes } from 'react-router'
+
+import { Layout } from '@/components/layout'
+import { DevicesPage } from '@/pages/devices'
+import { JournalPage } from '@/pages/journal'
+import { OverviewPage } from '@/pages/overview'
 
 export default function App() {
   return (
-    <main className="flex min-h-svh flex-col items-start gap-4 p-8">
-      <h1 className="text-2xl font-semibold">Cerebellum</h1>
-      <p className="text-muted-foreground">Devices and their decisions will show up here.</p>
-      <Button>Refresh</Button>
-    </main>
+    <Routes>
+      <Route element={<Layout />}>
+        <Route index element={<OverviewPage />} />
+        <Route path="journal" element={<JournalPage />} />
+        <Route path="devices" element={<DevicesPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
   )
 }
