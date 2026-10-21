@@ -1,0 +1,112 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  enable:
+    # correctness
+    - govet
+    - staticcheck
+    - unused
+    - errcheck
+    - errorlint
+    - nilerr
+    - forcetypeassert
+    - copyloopvar
+    - durationcheck
+    - reassign
+    # style
+    - gocritic
+    - revive
+    - whitespace
+    - godot
+    - misspell
+    - dupword
+    - predeclared
+    - errname
+    - asciicheck
+    # complexity
+    - gocyclo
+    - nestif
+    - funlen
+    - dupl
+    # performance
+    - perfsprint
+    - unconvert
+    - ineffassign
+    - goconst
+    # security & resources
+    - gosec
+    - bidichk
+    - bodyclose
+    - noctx
+    - containedctx
+    - fatcontext
+    # logging
+    - sloglint
+    - loggercheck
+    # testing
+    - thelper
+    - usetesting
+    # modernization & meta
+    - modernize
+    - intrange
+    - usestdlibvars
+    - exhaustive
+    - nolintlint
+
+  disable:
+    # Blank-line rules the codebase has never followed; hundreds of
+    # findings with no bearing on correctness.
+    - wsl_v5
+    # Tests swap process-wide state (slog.Default, gin mode),
+    # so running them in parallel would race. The suite takes seconds.
+    - paralleltest
+    - lll
+    - prealloc
+    - wrapcheck
+    - err113
+    - mnd
+    - varnamelen
+    - exhaustruct
+    - gochecknoglobals
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+    funlen:
+      lines: 120
+      statements: 80
+    goconst:
+      min-len: 3
+      min-occurrences: 4
+    gocyclo:
+      min-complexity: 13
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+  exclusions:
+    rules:
+      # Test tables and fixtures repeat literals and grow long on purpose;
+      # requests built in tests need no cancellation.
+      - path: _test\.go
+        linters: [goconst, gocyclo, funlen, dupl, noctx]
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    gofumpt:
+      extra:
+        group-params: true
+    goimports:
+      local-prefixes:
+        - github.com/cerebellum-labs/cerebellum/packages/server

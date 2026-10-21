@@ -7,5 +7,6 @@ All notable changes are listed here, in the [Keep a Changelog](https://keepachan
 ### Added
 
 - README, MIT license, contributing guide, code of conduct, security policy and third-party notices.
+- Server: health check at `/health`, JSON errors, `X-Request-ID` on every response, 5 MB request body limit.
 
 [Unreleased]: https://github.com/cerebellum-labs/cerebellum/commits/main
