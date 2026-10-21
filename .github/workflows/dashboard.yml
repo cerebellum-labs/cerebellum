@@ -1,0 +1,42 @@
+name: Dashboard
+
+# Checks packages/dashboard: lint, types and a production build. It only runs
+# when called from ci.yml. The dashboard is deployed by its host from main, so
+# there is no image or release here.
+on:
+  workflow_call:
+
+permissions: {}
+
+defaults:
+  run:
+    # An explicit bash adds -o pipefail, which GitHub's default shell lacks.
+    shell: bash
+    working-directory: packages/dashboard
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # The pnpm version comes from packageManager in package.json.
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: packages/dashboard/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: packages/dashboard/.node-version
+          cache: pnpm
+          cache-dependency-path: packages/dashboard/pnpm-lock.yaml
+      # --frozen-lockfile: a lockfile out of step with package.json fails the
+      # run instead of installing other versions than the ones reviewed.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build

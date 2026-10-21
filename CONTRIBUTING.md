@@ -24,6 +24,7 @@ Thanks for helping. The repository layout is in the [README](README.md#repositor
 - CI runs on pushes to this repository, so a pull request from a fork gets no checks; a maintainer pushes its branch here to run them before merging.
 - The server image is `ghcr.io/cerebellum-labs/cerebellum-server`, for `linux/amd64` and `linux/arm64`. `latest` and `X.Y` only come from releases.
 - `make lint test` in `packages/server` runs the same checks locally. CI uses golangci-lint v2.15.0 (`.github/workflows/server.yml`); use the same version.
+- The dashboard (`packages/dashboard`) uses Node.js 24 and pnpm. `pnpm install`, then `pnpm lint`, `pnpm typecheck` and `pnpm build` run the same checks as CI. It is deployed by its host from `main`, with no images or releases.
 
 ## Changelog and releases
 

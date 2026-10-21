@@ -41,3 +41,16 @@ updates:
         patterns: ['*']
     commit-message:
       prefix: build(server)
+
+  # Reads pnpm-lock.yaml; React, Vite and the shadcn dependencies alike.
+  - package-ecosystem: npm
+    directory: /packages/dashboard
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      npm:
+        patterns: ['*']
+    commit-message:
+      prefix: build(dashboard)
