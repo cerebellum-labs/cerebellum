@@ -19,6 +19,7 @@ ref=$2
 all() {
 	echo "server=true"
 	echo "server-image=true"
+	echo "dashboard=true"
 	exit 0
 }
 
@@ -44,3 +45,4 @@ changed() {
 
 echo "server=$(changed '^packages/server/')"
 echo "server-image=$(changed '^packages/server/(Dockerfile|\.dockerignore)$')"
+echo "dashboard=$(changed '^packages/dashboard/')"

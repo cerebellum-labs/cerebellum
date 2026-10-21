@@ -39,6 +39,7 @@ jobs:
     outputs:
       server: ${{ steps.changes.outputs.server }}
       server-image: ${{ steps.changes.outputs.server-image }}
+      dashboard: ${{ steps.changes.outputs.dashboard }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -68,10 +69,18 @@ jobs:
       # only when asked to.
       push: ${{ github.event_name == 'workflow_dispatch' && inputs.push-image || github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
+  dashboard:
+    name: Dashboard
+    needs: changes
+    if: needs.changes.outputs.dashboard != 'false'
+    uses: ./.github/workflows/dashboard.yml
+    permissions:
+      contents: read
+
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [changes, server]
+    needs: [changes, server, dashboard]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
