@@ -20,7 +20,7 @@ Thanks for helping. The repository layout is in the [README](README.md#repositor
 - Every push to any branch runs CI. It checks the packages the branch changes compared with `main` (a change under `.github/` checks all of them) and ends in `ci-ok`, the one check to require on `main`.
 - Every merge to `main` checks everything and publishes the server image as `main` and `sha-<commit>`.
 - For an image of a branch, run **Actions → CI → Run workflow** on it: it is published as `br-<branch>` and `sha-<commit>`.
-- Pull requests from forks are checked by **CI (fork)**, without images; a maintainer merges them once it's green.
+- CI runs on pushes to this repository, so a pull request from a fork gets no checks; a maintainer pushes its branch here to run them before merging.
 - The server image is `ghcr.io/cerebellum-labs/cerebellum-server`, for `linux/amd64` and `linux/arm64`. `latest` and `X.Y` only come from releases.
 - `make lint test` in `packages/server` runs the same checks locally. CI uses golangci-lint v2.15.0 (`.github/workflows/server.yml`); use the same version.
 

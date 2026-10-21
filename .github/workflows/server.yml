@@ -1,7 +1,7 @@
 name: Server
 
 # Checks packages/server and builds its image for linux/amd64 and linux/arm64.
-# It only runs when called (ci.yml, ci-fork.yml, release.yml), so CI and
+# It only runs when called (ci.yml, release.yml), so CI and
 # releases go through exactly the same checks.
 on:
   workflow_call:
@@ -102,7 +102,7 @@ jobs:
     permissions:
       contents: read
       # Only used when inputs.push is set; GitHub downgrades it to read for
-      # forks and Dependabot.
+      # Dependabot.
       packages: write
     outputs:
       digest: ${{ steps.build.outputs.digest }}

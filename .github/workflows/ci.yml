@@ -1,9 +1,9 @@
 name: CI
 
 # Runs on every push to every branch and checks the packages the branch
-# changes. Pull requests from this repository are covered by the push run of
-# their branch; ci-fork.yml handles forks. The ci-ok job is the one check to
-# require on main.
+# changes. A pull request is covered by the push run of its branch; one from
+# a fork gets no run, since its pushes happen in the fork. The ci-ok job is
+# the one check to require on main.
 on:
   push:
     branches: ['**']
