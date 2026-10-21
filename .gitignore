@@ -1,0 +1,41 @@
+# OS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Secrets: commit .env.example only
+.env
+.env.*
+!.env.example
+
+# Go
+bin/
+*.test
+*.out
+coverage.*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Agent state on the device
+*.sqlite
+*.sqlite3
+*.db
+
+# Model weights: downloaded at setup, never committed
+*.onnx
+*.pt
+*.pth
+*.tflite
+*.engine
+*.safetensors
