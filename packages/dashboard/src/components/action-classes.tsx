@@ -1,0 +1,122 @@
+import { ArrowCounterClockwise, Check, Clock, Lightning, LockSimple } from '@phosphor-icons/react'
+import { useQuery } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+
+import { api } from '@/api/client'
+import type { ActionClass, DecisionView } from '@/api/types'
+import { useRecentDecisions } from '@/hooks/use-recent-decisions'
+import { useRobot } from '@/hooks/use-robot'
+import { CLASS_LABEL, humanize } from '@/lib/decision'
+import { count } from '@/lib/format'
+import { cn } from '@/lib/utils'
+
+// How each class behaves is the product's rule, the same for every robot.
+const CLASSES: { key: ActionClass; icon: ReactNode; decides: string; offline: string; waitsOffline: boolean }[] = [
+  {
+    key: 'reflex',
+    icon: <Lightning className="size-4" />,
+    decides: 'The robot, instantly',
+    offline: 'Always works',
+    waitsOffline: false,
+  },
+  {
+    key: 'reversible',
+    icon: <ArrowCounterClockwise className="size-4" />,
+    decides: 'The robot, checked later',
+    offline: 'Keeps working',
+    waitsOffline: false,
+  },
+  {
+    key: 'irreversible',
+    icon: <LockSimple className="size-4" />,
+    decides: 'Only the cloud model',
+    offline: 'Waits for network',
+    waitsOffline: true,
+  },
+]
+
+// One grid for the header and the rows; on phones each row stacks.
+const ROW =
+  'grid gap-x-6 gap-y-2 px-4 sm:px-5 md:grid-cols-[minmax(0,10rem)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_5rem] md:items-center'
+
+/** The actions the robots actually took in a class, most frequent first. */
+function actionsOf(rows: DecisionView[], actionClass: ActionClass): string[] {
+  const seen = new Map<string, number>()
+  for (const d of rows) {
+    if (d.action_class === actionClass && d.action) seen.set(d.action, (seen.get(d.action) ?? 0) + 1)
+  }
+  return [...seen.entries()].sort((a, b) => b[1] - a[1]).map(([action]) => action)
+}
+
+/** The rules as a table: who decides each kind of action, and what happens offline. */
+export function ActionClasses() {
+  const robot = useRobot()
+  const stats = useQuery({ queryKey: ['stats', null], queryFn: () => api.stats() })
+  const recent = useRecentDecisions()
+  const s = stats.data
+  const waitingNow = robot.queued || s?.by_status.waiting_for_server || 0
+
+  return (
+    <section aria-labelledby="rules-title" className="grid gap-5">
+      <div className="grid gap-1">
+        <h2 id="rules-title" className="text-xl font-semibold tracking-tight">
+          The rules
+        </h2>
+        <p className="text-muted-foreground">Every action of the robot belongs to one of three classes.</p>
+      </div>
+
+      <div role="table" aria-labelledby="rules-title" className="panel overflow-hidden">
+        <div role="row" className={cn(ROW, 'hidden h-11 border-b text-sm text-muted-foreground md:grid')}>
+          <span role="columnheader">Class</span>
+          <span role="columnheader">Who decides</span>
+          <span role="columnheader">Without network</span>
+          <span role="columnheader">Actions seen</span>
+          <span role="columnheader" className="text-right">
+            Decisions
+          </span>
+        </div>
+        {CLASSES.map((c) => {
+          const waiting = c.waitsOffline && !robot.online
+          const actions = actionsOf(recent.data ?? [], c.key).slice(0, 3)
+          return (
+            <div role="row" key={c.key} className={cn(ROW, 'border-b py-4 last:border-b-0')}>
+              <span role="rowheader" className="flex items-center gap-2.5 font-medium">
+                <span className="text-brand">{c.icon}</span>
+                {CLASS_LABEL[c.key]}
+              </span>
+              <span role="cell">{c.decides}</span>
+              <span
+                role="cell"
+                className={cn(
+                  'flex items-center gap-2 transition-colors duration-500',
+                  waiting ? 'text-led-amber' : !robot.online ? 'text-led-green' : 'text-muted-foreground',
+                )}
+              >
+                {c.waitsOffline ? (
+                  <Clock className="size-4 shrink-0" aria-hidden />
+                ) : (
+                  <Check className="size-4 shrink-0" aria-hidden />
+                )}
+                {waiting ? `${count(waitingNow)} waiting now` : !robot.online ? 'Working now' : c.offline}
+              </span>
+              <span role="cell" className="flex flex-wrap gap-1.5">
+                {actions.length ? (
+                  actions.map((a) => (
+                    <span key={a} className="rounded-[4px] border border-border-strong px-1.5 text-sm leading-6">
+                      {humanize(a)}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-faint">–</span>
+                )}
+              </span>
+              <span role="cell" className="readout text-muted-foreground md:text-right">
+                {s ? count(s.by_class[c.key]) : ''}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
