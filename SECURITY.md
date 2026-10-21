@@ -8,4 +8,4 @@ Include what you ran, what happened and what you expected. We aim to reply withi
 
 ## Supported versions
 
-Cerebellum is pre-1.0; only the latest commit on `main` gets fixes.
+Cerebellum is pre-1.0. Fixes go to `main` and ship in the next release of each package; older releases are not patched, so update to the latest one.

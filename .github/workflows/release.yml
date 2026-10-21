@@ -1,0 +1,177 @@
+name: Release
+
+# Publishes a package when its release tag is pushed (make release V=X.Y.Z in
+# the package; see RELEASING.md). Order: check the tag, run the package's
+# CI and publish its image, attest the image, create the GitHub release. Each
+# step can be re-run: work that already went through is detected and skipped.
+on:
+  push:
+    tags: ['server/v*']
+
+permissions: {}
+
+defaults:
+  run:
+    # An explicit bash adds -o pipefail; GitHub's default doesn't, and a
+    # failing tag check piped into tee would pass.
+    shell: bash
+
+concurrency:
+  # One server release at a time, in the order the tags were pushed: a release
+  # that started earlier can't finish later and take latest from a newer one.
+  # If tags pile up, GitHub keeps only the newest waiting run; re-run a
+  # cancelled one from its tag.
+  group: release-server
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      package: ${{ steps.tag.outputs.package }}
+      image: ${{ steps.tag.outputs.image }}
+      version: ${{ steps.tag.outputs.version }}
+      core: ${{ steps.tag.outputs.core }}
+      minor: ${{ steps.tag.outputs.minor }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+      build: ${{ steps.image.outputs.build }}
+      digest: ${{ steps.image.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # All tags and main's history, but no file contents beyond the
+          # tagged commit.
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      # Format, commit on main, version above the last release, changelog
+      # section for a final version.
+      - id: tag
+        run: .github/scripts/release-check.sh "$GITHUB_REF_NAME" "$GITHUB_SHA" | tee -a "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # A version is published once. If its image exists and was built from
+      # this commit, this run is a retry and skips the build; built from any
+      # other commit, the release stops instead of replacing it.
+      - id: image
+        env:
+          REF: ${{ steps.tag.outputs.image }}:${{ steps.tag.outputs.version }}
+        run: |
+          # Only an explicit "not found" means the version is new; any other
+          # registry error stops here rather than risk publishing over it.
+          if ! out=$(docker buildx imagetools inspect "$REF" 2>&1); then
+            if grep -qiE 'not found|manifest unknown' <<<"$out"; then
+              echo "build=true" | tee -a "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::can't tell whether $REF exists: $out"
+            exit 1
+          fi
+          revision=$(docker buildx imagetools inspect "$REF" --format '{{json .Manifest}}' |
+            jq -r '.annotations["org.opencontainers.image.revision"] // empty')
+          if [[ $revision != "$GITHUB_SHA" ]]; then
+            echo "::error::$REF already exists, built from ${revision:-an unknown commit}"
+            exit 1
+          fi
+          digest=$(docker buildx imagetools inspect "$REF" | awk '/^Digest:/ { print $2; exit }')
+          echo "$REF is already published from this commit"
+          { echo "build=false"; echo "digest=$digest"; } | tee -a "$GITHUB_OUTPUT"
+
+  server:
+    name: Server
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    uses: ./.github/workflows/server.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      push: true
+      release-version: ${{ needs.check.outputs.version }}
+      release-minor: ${{ needs.check.outputs.minor }}
+      latest: ${{ needs.check.outputs.prerelease == 'false' }}
+
+  attest:
+    name: Attest image
+    needs: [check, server]
+    # Signed build provenance, verifiable with `gh attestation verify`.
+    # GitHub offers attestations to public repositories, so a private copy of
+    # this repository skips the step.
+    if: >-
+      always()
+      && needs.check.result == 'success'
+      && contains(fromJSON('["success", "skipped"]'), needs.server.result)
+      && github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ needs.check.outputs.image }}
+          subject-digest: ${{ needs.server.outputs.digest || needs.check.outputs.digest }}
+          push-to-registry: true
+
+  release:
+    name: GitHub release
+    needs: [check, server, attest]
+    if: >-
+      always()
+      && needs.check.result == 'success'
+      && contains(fromJSON('["success", "skipped"]'), needs.server.result)
+      && contains(fromJSON('["success", "skipped"]'), needs.attest.result)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PACKAGE: ${{ needs.check.outputs.package }}
+          IMAGE: ${{ needs.check.outputs.image }}
+          VERSION: ${{ needs.check.outputs.version }}
+          CORE: ${{ needs.check.outputs.core }}
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists"
+            exit 0
+          fi
+
+          changelog="packages/$PACKAGE/CHANGELOG.md"
+          notes="$RUNNER_TEMP/notes.md"
+          if [[ $PRERELEASE == true ]]; then
+            { echo "Release candidate for $CORE."; echo; .github/scripts/changelog-section.sh "$changelog" Unreleased; } > "$notes"
+            flags=(--prerelease --latest=false)
+          else
+            .github/scripts/changelog-section.sh "$changelog" "$VERSION" > "$notes"
+            # The server is the product: its final releases take the Latest badge.
+            flags=(--latest)
+          fi
+          { echo; echo "Image: \`$IMAGE:$VERSION\`"; } >> "$notes"
+
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$PACKAGE v$VERSION" --notes-file "$notes" "${flags[@]}"

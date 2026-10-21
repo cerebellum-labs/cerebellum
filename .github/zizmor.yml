@@ -1,0 +1,12 @@
+rules:
+  # The $/ form matters for local actions in steps. A reusable workflow called
+  # with ./ already comes from the caller's commit, ./ is the documented form,
+  # and actionlint only checks the inputs between caller and callee for ./.
+  self-repository:
+    disable: true
+  # Actions are referenced by major version tag (@v7), not by commit SHA, so
+  # they pick up fixes without a pull request; Dependabot moves the major.
+  unpinned-uses:
+    config:
+      policies:
+        '*': ref-pin

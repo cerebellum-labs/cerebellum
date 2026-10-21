@@ -23,13 +23,13 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     -o /out/server ./cmd/server
 
 
+# alpine already ships the root certificates outbound TLS needs
+# (ca-certificates-bundle). With no RUN in this stage, the arm64 image is
+# assembled without emulating arm64.
 FROM alpine:3
-# ca-certificates is required: outbound calls go over TLS, and the base image
-# ships no root certificates.
-RUN apk add --no-cache ca-certificates \
-    && adduser -D -H -u 10001 app
 
 COPY --from=builder /out/server /server
 
-USER app
+# A numeric user needs no /etc/passwd entry; it just must not be root.
+USER 10001:10001
 ENTRYPOINT ["/server"]
