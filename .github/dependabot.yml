@@ -1,0 +1,43 @@
+version: 2
+# Updates wait 7 days after a release: a compromised version is usually
+# pulled within that window, before it reaches this repository.
+updates:
+  # Actions are referenced by major version tag; Dependabot opens a pull
+  # request when a new major comes out.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: gomod
+    directory: /packages/server
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      go:
+        patterns: ['*']
+    commit-message:
+      prefix: build(server)
+
+  # Moves the Go base image to new Go releases (golang:1.27-alpine →
+  # golang:1.28-alpine); alpine:3 follows Alpine 3.x on every build.
+  - package-ecosystem: docker
+    directory: /packages/server
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      docker:
+        patterns: ['*']
+    commit-message:
+      prefix: build(server)

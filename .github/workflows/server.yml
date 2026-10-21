@@ -1,0 +1,176 @@
+name: Server
+
+# Checks packages/server and builds its image for linux/amd64 and linux/arm64.
+# It only runs when called (ci.yml, ci-fork.yml, release.yml), so CI and
+# releases go through exactly the same checks.
+on:
+  workflow_call:
+    inputs:
+      push:
+        description: Push the image to GHCR.
+        type: boolean
+        default: false
+      release-version:
+        description: Release version (X.Y.Z or X.Y.Z-rc.N). Empty outside releases.
+        type: string
+        default: ''
+      release-minor:
+        description: X.Y of the release, tagged together with latest.
+        type: string
+        default: ''
+      latest:
+        description: Also tag the release X.Y and latest.
+        type: boolean
+        default: false
+    outputs:
+      digest:
+        description: Digest of the image index.
+        value: ${{ jobs.image.outputs.digest }}
+
+permissions: {}
+
+env:
+  # Dependabot doesn't see these two; bump them by hand, and keep golangci-lint
+  # on the version used locally.
+  GOLANGCI_LINT_VERSION: v2.15.0
+  GOVULNCHECK_VERSION: v1.9.0
+
+defaults:
+  run:
+    working-directory: packages/server
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: packages/server/go.mod
+          cache-dependency-path: packages/server/go.sum
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: packages/server
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: packages/server/go.mod
+          cache-dependency-path: packages/server/go.sum
+      - run: make test
+
+  vuln:
+    name: Vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: packages/server/go.mod
+          cache-dependency-path: packages/server/go.sum
+      # Fails only on vulnerabilities the code actually reaches.
+      - run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...
+
+  image:
+    name: Image
+    needs: [lint, test, vuln]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Only used when inputs.push is set; GitHub downgrades it to read for
+      # forks and Dependabot.
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - id: version
+        env:
+          RELEASE_VERSION: ${{ inputs.release-version }}
+        # A release carries its version; any other build names its commit.
+        run: echo "version=${RELEASE_VERSION:-sha-${GITHUB_SHA::7}}" >> "$GITHUB_OUTPUT"
+
+      - id: image
+        working-directory: .
+        run: echo "image=$(.github/scripts/image.sh server)" >> "$GITHUB_OUTPUT"
+
+      # No QEMU: Go cross-compiles for arm64, and the final stage has no RUN
+      # steps that would need arm64 emulation.
+      - uses: docker/setup-buildx-action@v4
+
+      - if: inputs.push
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tags: main and sha-<commit> on main, br-<branch> and sha-<commit> on a
+      # manual branch run, X.Y.Z (plus X.Y and latest for a final release) on a
+      # release. latest never comes from anything but a release.
+      - id: meta
+        uses: docker/metadata-action@v6
+        env:
+          # Annotations also go on the index, where GHCR reads the description
+          # of a multi-platform image and the release workflow reads the
+          # revision of an existing one.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+        with:
+          images: ${{ steps.image.outputs.image }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ inputs.release-version }},enable=${{ inputs.release-version != '' }}
+            type=raw,value=${{ inputs.release-minor }},enable=${{ inputs.latest }}
+            type=raw,value=latest,enable=${{ inputs.latest }}
+            type=raw,value=main,enable=${{ inputs.release-version == '' && github.ref == 'refs/heads/main' }}
+            type=ref,event=branch,prefix=br-,enable=${{ inputs.release-version == '' && github.ref != 'refs/heads/main' }}
+            type=sha,prefix=sha-,format=short,enable=${{ inputs.release-version == '' }}
+          labels: &metadata |
+            org.opencontainers.image.title=cerebellum-server
+            org.opencontainers.image.description=Cerebellum server: sync layer between a robot's on-device and cloud models.
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+          annotations: *metadata
+
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: packages/server
+          platforms: linux/amd64,linux/arm64
+          push: ${{ inputs.push }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          build-args: VERSION=${{ steps.version.outputs.version }}
+          # Releases build from scratch, so a release image never contains a
+          # layer some other run put in the cache. Only main writes the cache:
+          # branches read it, and per-branch copies would push it out of the
+          # repository's 10 GB cache.
+          cache-from: ${{ inputs.release-version == '' && 'type=gha,scope=server' || '' }}
+          cache-to: ${{ inputs.release-version == '' && github.ref == 'refs/heads/main' && 'type=gha,scope=server,mode=max' || '' }}
+          provenance: ${{ inputs.push && 'mode=max' || 'false' }}
+          sbom: ${{ inputs.push }}

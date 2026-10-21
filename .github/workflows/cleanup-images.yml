@@ -1,0 +1,61 @@
+name: Clean up images
+
+# Weekly cleanup of the server image in GHCR. Release versions, X.Y, latest
+# and main are never deleted. The action keeps the platform images and
+# attestations a multi-platform image is made of.
+#
+# Scheduled runs only report what they would delete until the repository
+# variable GHCR_CLEANUP_DRY_RUN is set to false (Settings → Secrets and
+# variables → Actions → Variables).
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Only report what would be deleted
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: cleanup-images
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Clean up
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      packages: write
+    env:
+      # format() keeps a manual "false" from falling through to the variable.
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.dry-run) || format('{0}', vars.GHCR_CLEANUP_DRY_RUN != 'false') }}
+    steps:
+      - name: Branch images older than 14 days
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          package: cerebellum-server
+          delete-tags: br-*
+          older-than: 14 days
+          dry-run: ${{ env.DRY_RUN }}
+
+      # A sha- tag on an image that is also main only loses that tag.
+      - name: Commit images beyond the newest 20
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          package: cerebellum-server
+          delete-tags: sha-*
+          keep-n-tagged: 20
+          exclude-tags: main,latest,*.*
+          dry-run: ${{ env.DRY_RUN }}
+
+      - name: Untagged images
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          package: cerebellum-server
+          delete-untagged: true
+          validate: true
+          dry-run: ${{ env.DRY_RUN }}

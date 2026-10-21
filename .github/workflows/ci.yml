@@ -1,0 +1,77 @@
+name: CI
+
+# Runs on every push to every branch and checks the packages the branch
+# changes. Pull requests from this repository are covered by the push run of
+# their branch; ci-fork.yml handles forks. The ci-ok job is the one check to
+# require on main.
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+    inputs:
+      push-image:
+        description: Push the images built from this branch (br-<branch> and sha-<commit> tags)
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  # main queues and never cancels, so :main always ends on the newest commit.
+  # A manual run has its own group, so a push to the same branch can't cancel
+  # the image build it was started for.
+  group: ci-${{ github.ref == 'refs/heads/main' && 'main' || format('{0}-{1}', github.event_name, github.ref) }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      server: ${{ steps.changes.outputs.server }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The whole history for merge-base and the changed file names, but
+          # no file contents beyond the checked-out commit.
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+        run: .github/scripts/changes.sh "$EVENT" "$GITHUB_REF" | tee -a "$GITHUB_OUTPUT"
+
+  server:
+    name: Server
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    uses: ./.github/workflows/server.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      # Every push to main publishes; a manual run, main included, publishes
+      # only when asked to.
+      push: ${{ github.event_name == 'workflow_dispatch' && inputs.push-image || github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [changes, server]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      # A package the branch doesn't touch is skipped and counts as passed; a
+      # failed or cancelled job doesn't.
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Results: $RESULTS"
+          case " $RESULTS " in
+          *" failure "* | *" cancelled "*) exit 1 ;;
+          esac

@@ -1,0 +1,27 @@
+name: CI (fork)
+
+# Checks pull requests from forks, which ci.yml never sees. It has no ci-ok
+# job on purpose: a pull request from this repository also triggers this
+# workflow, and a skipped ci-ok here would count as a passed required check.
+# A fork's pull request is merged by a maintainer once these checks are green.
+on:
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: ci-fork-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: Server
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    uses: ./.github/workflows/server.yml
+    permissions:
+      contents: read
+      # Required by the called workflow; GitHub gives forks a read-only token
+      # whatever is asked for, and push stays off.
+      packages: write
+    with:
+      push: false

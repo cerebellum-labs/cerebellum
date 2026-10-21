@@ -15,6 +15,17 @@ Thanks for helping. The repository layout is in the [README](README.md#repositor
 - Do not commit model weights, datasets, frames or SQLite files. Document where to download them instead.
 - Every third-party model, dataset or library with its own license goes into [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Check that the license allows use from an MIT project before adding it.
 
-## Changelog
+## CI and images
 
-[CHANGELOG.md](CHANGELOG.md) follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): changes users notice go under `## [Unreleased]`.
+- Every push to any branch runs CI. It checks the packages the branch changes compared with `main` (a change under `.github/` checks all of them) and ends in `ci-ok`, the one check to require on `main`.
+- Every merge to `main` checks everything and publishes the server image as `main` and `sha-<commit>`.
+- For an image of a branch, run **Actions → CI → Run workflow** on it: it is published as `br-<branch>` and `sha-<commit>`.
+- Pull requests from forks are checked by **CI (fork)**, without images; a maintainer merges them once it's green.
+- The server image is `ghcr.io/cerebellum-labs/cerebellum-server`, for `linux/amd64` and `linux/arm64`. `latest` and `X.Y` only come from releases.
+- `make lint test` in `packages/server` runs the same checks locally. CI uses golangci-lint v2.15.0 (`.github/workflows/server.yml`); use the same version.
+
+## Changelog and releases
+
+Each package is versioned and released on its own. Its `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): changes users notice go under `## [Unreleased]` in the pull request that makes them.
+
+How to release a package, and what to do when a release fails: [RELEASING.md](RELEASING.md).
