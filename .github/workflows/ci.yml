@@ -23,7 +23,8 @@ defaults:
     shell: bash
 
 concurrency:
-  # main queues and never cancels, so :main always ends on the newest commit.
+  # main queues and never cancels, so :main never moves back to an older
+  # commit.
   # A manual run has its own group, so a push to the same branch can't cancel
   # the image build it was started for.
   group: ci-${{ github.ref == 'refs/heads/main' && 'main' || format('{0}-{1}', github.event_name, github.ref) }}
@@ -36,6 +37,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      packages: read
     outputs:
       server: ${{ steps.changes.outputs.server }}
       server-image: ${{ steps.changes.outputs.server-image }}
@@ -48,10 +50,29 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+
+      # On main, the server is compared with the commit the current :main
+      # image was built from (see changes.sh). Empty when there is no image
+      # or no commit on it, and changes.sh then checks everything.
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          image=$(.github/scripts/image.sh server)
+          revision=$(docker buildx imagetools inspect "$image:main" --format '{{json .Manifest}}' 2>/dev/null |
+            jq -r '.annotations["org.opencontainers.image.revision"] // empty') || revision=
+          echo "revision=$revision" | tee -a "$GITHUB_OUTPUT"
+
       - id: changes
         env:
           EVENT: ${{ github.event_name }}
-        run: .github/scripts/changes.sh "$EVENT" "$GITHUB_REF" | tee -a "$GITHUB_OUTPUT"
+          IMAGE_REVISION: ${{ steps.image.outputs.revision }}
+        run: .github/scripts/changes.sh "$EVENT" "$GITHUB_REF" "$IMAGE_REVISION" | tee -a "$GITHUB_OUTPUT"
 
   server:
     name: Server
