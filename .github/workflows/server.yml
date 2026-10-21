@@ -37,6 +37,8 @@ env:
 
 defaults:
   run:
+    # An explicit bash adds -o pipefail, which GitHub's default shell lacks.
+    shell: bash
     working-directory: packages/server
 
 jobs:

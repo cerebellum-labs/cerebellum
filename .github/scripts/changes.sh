@@ -23,7 +23,10 @@ fi
 
 # A branch without history in common with main can't be narrowed down.
 base=$(git merge-base origin/main HEAD) || all
-files=$(git diff --name-only "$base" HEAD)
+# --no-renames: rename detection reads file contents, which a blobless
+# checkout doesn't have and can't fetch without credentials. It also lists a
+# moved file under both its old and new path, so both packages count.
+files=$(git diff --no-renames --name-only "$base" HEAD)
 
 # A change to CI itself checks every package.
 if grep -q '^\.github/' <<<"$files"; then

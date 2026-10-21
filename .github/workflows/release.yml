@@ -10,6 +10,12 @@ on:
 
 permissions: {}
 
+defaults:
+  run:
+    # An explicit bash adds -o pipefail; GitHub's default doesn't, and a
+    # failing tag check piped into tee would pass.
+    shell: bash
+
 concurrency:
   # One server release at a time, in the order the tags were pushed: a release
   # that started earlier can't finish later and take latest from a newer one.

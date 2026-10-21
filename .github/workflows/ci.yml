@@ -16,6 +16,12 @@ on:
 
 permissions: {}
 
+defaults:
+  run:
+    # An explicit bash adds -o pipefail; GitHub's default doesn't, and a
+    # failing script piped into tee would pass.
+    shell: bash
+
 concurrency:
   # main queues and never cancels, so :main always ends on the newest commit.
   # A manual run has its own group, so a push to the same branch can't cancel
@@ -48,7 +54,8 @@ jobs:
   server:
     name: Server
     needs: changes
-    if: needs.changes.outputs.server == 'true'
+    # Skipped only on an explicit false: a missing answer runs the checks.
+    if: needs.changes.outputs.server != 'false'
     uses: ./.github/workflows/server.yml
     permissions:
       contents: read
