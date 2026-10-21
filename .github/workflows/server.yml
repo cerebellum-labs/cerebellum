@@ -6,6 +6,10 @@ name: Server
 on:
   workflow_call:
     inputs:
+      image:
+        description: Build the image. Off for branches that don't change how it is built.
+        type: boolean
+        default: true
       push:
         description: Push the image to GHCR.
         type: boolean
@@ -97,6 +101,8 @@ jobs:
   image:
     name: Image
     needs: [lint, test, vuln]
+    # A push always builds, whatever image says.
+    if: inputs.image || inputs.push
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

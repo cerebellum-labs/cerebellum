@@ -38,6 +38,7 @@ jobs:
       contents: read
     outputs:
       server: ${{ steps.changes.outputs.server }}
+      server-image: ${{ steps.changes.outputs.server-image }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -61,6 +62,8 @@ jobs:
       contents: read
       packages: write
     with:
+      # Like server, built unless the answer is an explicit false.
+      image: ${{ needs.changes.outputs.server-image != 'false' }}
       # Every push to main publishes; a manual run, main included, publishes
       # only when asked to.
       push: ${{ github.event_name == 'workflow_dispatch' && inputs.push-image || github.event_name == 'push' && github.ref == 'refs/heads/main' }}

@@ -18,6 +18,7 @@ Thanks for helping. The repository layout is in the [README](README.md#repositor
 ## CI and images
 
 - Every push to any branch runs CI. It checks the packages the branch changes compared with `main` (a change under `.github/` checks all of them) and ends in `ci-ok`, the one check to require on `main`.
+- A branch builds the server image, without publishing it, only when it changes `packages/server/Dockerfile`, `packages/server/.dockerignore` or `.github/`.
 - Every merge to `main` checks everything and publishes the server image as `main` and `sha-<commit>`.
 - For an image of a branch, run **Actions → CI → Run workflow** on it: it is published as `br-<branch>` and `sha-<commit>`.
 - CI runs on pushes to this repository, so a pull request from a fork gets no checks; a maintainer pushes its branch here to run them before merging.
