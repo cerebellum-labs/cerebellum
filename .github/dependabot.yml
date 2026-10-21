@@ -4,9 +4,8 @@ version: 2
 updates:
   # Actions are referenced by major version tag; Dependabot opens a pull
   # request when a new major comes out.
-  # "/" only covers .github/workflows; local actions are listed on their own.
   - package-ecosystem: github-actions
-    directories: [/, /.github/actions/*]
+    directory: /
     schedule:
       interval: weekly
     cooldown:
