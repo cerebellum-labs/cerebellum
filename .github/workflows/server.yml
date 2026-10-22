@@ -77,6 +77,9 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: packages/server
+      # The code sqlc generates must match the queries and migrations.
+      - run: make sqlc-diff
+      - run: go mod tidy -diff
 
   test:
     name: Test
@@ -91,6 +94,34 @@ jobs:
       - *setup-go
       - *go-cache
       - run: make test
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    # Each test creates a database of its own on this server.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      TEST_DATABASE_URL: postgres://postgres@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - *setup-go
+      - *go-cache
+      - run: make test-integration
 
   vuln:
     name: Vulnerabilities
@@ -109,7 +140,7 @@ jobs:
 
   image:
     name: Image
-    needs: [lint, test, vuln]
+    needs: [lint, test, integration, vuln]
     # A push always builds, whatever image says.
     if: inputs.image || inputs.push
     runs-on: ubuntu-latest

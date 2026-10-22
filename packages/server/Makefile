@@ -5,8 +5,17 @@ BINARY := bin/server
 VERSION ?= $(or $(patsubst server/v%,%,$(shell git describe --tags --match 'server/v*' --always --dirty 2>/dev/null)),dev)
 LDFLAGS := -X main.version=$(VERSION)
 
-.PHONY: run build test lint fmt tidy clean docker release
+# sqlc compiles internal/db/queries into Go; run at a pinned version, the
+# same here and in CI, so the generated code doesn't change between machines.
+SQLC := go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
 
+# The database from `make db`.
+LOCAL_DATABASE_URL := postgres://postgres@localhost:5432/postgres?sslmode=disable
+
+.PHONY: run build test test-integration lint sqlc-diff generate db fmt tidy clean docker release
+
+# Runs against the database from `make db` unless DATABASE_URL is set.
+run: export DATABASE_URL ?= $(LOCAL_DATABASE_URL)
 run:
 	go run ./cmd/server
 
@@ -16,9 +25,30 @@ build:
 test:
 	go test ./... -race -shuffle=on -cover
 
+# The tests tagged integration as well, against PostgreSQL: the database from
+# `make db` unless TEST_DATABASE_URL is set. -count=1: never cached, since the
+# result depends on the database, not only on the code.
+test-integration: export TEST_DATABASE_URL ?= $(LOCAL_DATABASE_URL)
+test-integration:
+	go test ./... -tags=integration -race -shuffle=on -count=1 -cover
+
 # golangci-lint runs go vet among its linters; .golangci.yml is the config.
-lint:
+lint: sqlc-diff
 	golangci-lint run ./...
+
+# Fails when the generated code is behind the queries or the migrations.
+sqlc-diff:
+	$(SQLC) diff
+
+generate:
+	$(SQLC) generate
+
+# PostgreSQL 18 in Docker, without a password, for local development only.
+# Returns once it accepts connections, so `make db test-integration` works.
+db:
+	docker run --rm -d --name cerebellum-postgres -p 127.0.0.1:5432:5432 \
+		-e POSTGRES_HOST_AUTH_METHOD=trust postgres:18-alpine
+	until docker exec cerebellum-postgres pg_isready -q -U postgres; do sleep 1; done
 
 fmt:
 	golangci-lint fmt ./...

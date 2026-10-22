@@ -14,13 +14,15 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/cerebellum-labs/cerebellum/packages/server/internal/httperr"
+	"github.com/cerebellum-labs/cerebellum/packages/server/internal/logging"
 )
 
-// newTestRouter returns the production router with extra routes that panic
-// and read the body, so the middleware can be exercised end to end.
-func newTestRouter(t *testing.T) *gin.Engine {
+// newTestRouter returns the production router, logging to logger, with
+// extra routes that panic and read the body, so the middleware can be
+// exercised end to end.
+func newTestRouter(t *testing.T, logger *slog.Logger) *gin.Engine {
 	t.Helper()
-	r, err := NewRouter()
+	r, err := NewRouter(logger)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}
@@ -39,15 +41,8 @@ func newTestRouter(t *testing.T) *gin.Engine {
 	return r
 }
 
-// captureLogs sends slog output to a buffer for the duration of the test.
-func captureLogs(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
-}
+// discardLogger is for tests that don't look at the logs.
+var discardLogger = slog.New(slog.DiscardHandler)
 
 // logRecords decodes every JSON line written to buf.
 func logRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
@@ -64,8 +59,9 @@ func logRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
 }
 
 func TestRecoveryLogsPanicAsJSON(t *testing.T) {
-	logs := captureLogs(t)
-	r := newTestRouter(t)
+	t.Parallel()
+	var logs bytes.Buffer
+	r := newTestRouter(t, logging.New(&logs))
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/test/panic", nil)
@@ -79,9 +75,9 @@ func TestRecoveryLogsPanicAsJSON(t *testing.T) {
 		t.Errorf("body = %q, want %q", w.Body.String(), want)
 	}
 
-	records := logRecords(t, logs)
+	records := logRecords(t, &logs)
 	if len(records) != 2 {
-		t.Fatalf("got %d log records, want 2 (panic, access): %s", len(records), logs)
+		t.Fatalf("got %d log records, want 2 (panic, access): %s", len(records), logs.String())
 	}
 	panicRec, accessRec := records[0], records[1]
 	if panicRec["msg"] != "panic recovered" || panicRec["panic"] != "boom" {
@@ -99,7 +95,8 @@ func TestRecoveryLogsPanicAsJSON(t *testing.T) {
 }
 
 func TestRequestID(t *testing.T) {
-	r := newTestRouter(t)
+	t.Parallel()
+	r := newTestRouter(t, discardLogger)
 
 	tests := []struct {
 		name     string
@@ -113,6 +110,7 @@ func TestRequestID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, "/nope", nil)
 			if tt.incoming != "" {
@@ -135,7 +133,8 @@ func TestRequestID(t *testing.T) {
 }
 
 func TestBodyLimit(t *testing.T) {
-	r := newTestRouter(t)
+	t.Parallel()
+	r := newTestRouter(t, discardLogger)
 	tooLarge := `{"error":{"code":"payload_too_large","message":"request body too large"}}`
 
 	tests := []struct {
@@ -151,6 +150,7 @@ func TestBodyLimit(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, "/test/read", tt.body)
 			req.ContentLength = tt.size
