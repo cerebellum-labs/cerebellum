@@ -1,0 +1,23 @@
+# Starts the fruit sorter at boot on the Raspberry Pi and restarts it if it dies.
+# Install: copy to /etc/systemd/system/, adjust User and the paths, then
+#   sudo systemctl daemon-reload && sudo systemctl enable --now fruit-sorter
+# Logs: journalctl -u fruit-sorter -f
+[Unit]
+Description=Cerebellum fruit sorter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/cerebellum/examples/fruit-sorter
+# The device token (CEREBELLUM_URL, CEREBELLUM_TOKEN); keep it readable by the user only: chmod 600 .env
+EnvironmentFile=/home/pi/cerebellum/examples/fruit-sorter/.env
+ExecStart=/home/pi/.local/bin/uv run --extra pi fruit-sorter run --pi
+Restart=always
+RestartSec=3
+# Stops by SIGTERM; the sorter turns the lights off and closes the journal before it exits.
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

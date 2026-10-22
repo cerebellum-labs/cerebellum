@@ -14,4 +14,8 @@ All notable changes to the Cerebellum server are listed here, in the [Keep a Cha
 - `local_latency_ms` in the decision the agent sends: how long the local model took. It comes back as `latency_ms` of a device decision, and the dashboard's statistics average it.
 - The journal filters by `source`, and `changed=true` keeps the decisions where the cloud disagreed with the robot.
 
+### Changed
+
+- AGENT_API.md: a timeout, a 5xx or no network is no longer a failed attempt of an irreversible decision; it waits for the network, and only a `retry: true` answer counts. Documentation only: the server keeps no attempts.
+
 [Unreleased]: https://github.com/cerebellum-labs/cerebellum/commits/main/packages/server

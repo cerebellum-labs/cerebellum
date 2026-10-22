@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prints what a CI run checks, as name=true|false lines for $GITHUB_OUTPUT:
-# each package, and whether the server image is built.
+# each package and example, and whether the server image is built.
 # Usage: changes.sh <event> <ref> [<commit of the current :main image>]
 #
 # A manual run checks and builds everything: it is asked for on purpose.
@@ -29,8 +29,12 @@ all() {
 	echo "server=true"
 	echo "server-image=true"
 	echo "dashboard=true"
+	echo "agent=true"
+	echo "fruit-sorter=true"
 	exit 0
 }
+
+agent_paths='^(packages/agent/|packages/server/AGENT_API\.md$)'
 
 changed() { # changed <regex> <files>
 	if grep -Eq "$1" <<<"$2"; then echo true; else echo false; fi
@@ -63,6 +67,11 @@ if [[ $ref == refs/heads/main ]]; then
 	# On main the image follows the checks: a changed server is published.
 	echo "server-image=$server"
 	echo "dashboard=$(changed '^packages/dashboard/' "$since_parent")"
+	# Like the dashboard, nothing is published from them. The agent also follows the API document it
+	# implements, and the sorter follows the agent it is built on.
+	agent=$(changed "$agent_paths" "$since_parent")
+	echo "agent=$agent"
+	echo "fruit-sorter=$(if [[ $agent == true ]] || grep -q '^examples/fruit-sorter/' <<<"$since_parent"; then echo true; else echo false; fi)"
 	exit 0
 fi
 
@@ -77,3 +86,6 @@ fi
 echo "server=$(changed '^packages/server/' "$files")"
 echo "server-image=$(changed '^packages/server/(Dockerfile|\.dockerignore)$' "$files")"
 echo "dashboard=$(changed '^packages/dashboard/' "$files")"
+agent=$(changed "$agent_paths" "$files")
+echo "agent=$agent"
+echo "fruit-sorter=$(if [[ $agent == true ]] || grep -q '^examples/fruit-sorter/' <<<"$files"; then echo true; else echo false; fi)"

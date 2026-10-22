@@ -1,0 +1,44 @@
+name: Agent
+
+# Checks packages/agent: lint, format, tests and that the package builds. It only runs when called from
+# ci.yml. The agent isn't published anywhere yet, so there is no release here.
+on:
+  workflow_call:
+
+permissions: {}
+
+defaults:
+  run:
+    # An explicit bash adds -o pipefail, which GitHub's default shell lacks.
+    shell: bash
+    working-directory: packages/agent
+
+jobs:
+  check:
+    name: Check (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest the agent supports, which is what Raspberry Pi OS ships, and a current one.
+        python: ['3.11', '3.13']
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/agent/uv.lock
+      # --locked: a lockfile out of step with pyproject.toml fails the run instead of installing other
+      # versions than the ones reviewed.
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest
+      - run: uv build

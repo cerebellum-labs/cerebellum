@@ -24,6 +24,7 @@ Thanks for helping. The repository layout is in the [README](README.md#repositor
 - CI runs on pushes to this repository, so a pull request from a fork gets no checks; a maintainer pushes its branch here to run them before merging.
 - The server image is `ghcr.io/cerebellum-labs/cerebellum-server`, for `linux/amd64` and `linux/arm64`. `latest` and `X.Y` only come from releases.
 - `make lint test` in `packages/server` runs the same checks locally. CI uses golangci-lint v2.15.0 (`.github/workflows/server.yml`); use the same version. `make test` runs the unit tests; the tests against PostgreSQL carry the `integration` build tag and run with `make db test-integration` (PostgreSQL 18 in Docker). After changing `internal/db/queries` or `internal/db/migrations`, run `make generate`.
+- The agent (`packages/agent`) and the fruit sorter (`examples/fruit-sorter`) use Python 3.11 and [uv](https://docs.astral.sh/uv/). In each: `uv sync`, then `uv run ruff check .`, `uv run ruff format --check .` and `uv run pytest` run the same checks as CI. The sorter's tests use the agent in `packages/agent` and its fake server, so a change to the agent–server API updates `packages/agent/tests/fake_server.py` too. Commit `uv.lock`; CI installs with `--locked`.
 - The dashboard (`packages/dashboard`) uses Node.js 24 and pnpm. `pnpm install`, then `pnpm lint`, `pnpm typecheck` and `pnpm build` run the same checks as CI. It is deployed by its host from `main`, with no images or releases.
 
 ## Changelog and releases

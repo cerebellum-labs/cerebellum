@@ -1,0 +1,38 @@
+name: Fruit sorter
+
+# Checks examples/fruit-sorter: lint, format and tests, against the agent in this repository. It only runs
+# when called from ci.yml.
+on:
+  workflow_call:
+
+permissions: {}
+
+defaults:
+  run:
+    # An explicit bash adds -o pipefail, which GitHub's default shell lacks.
+    shell: bash
+    working-directory: examples/fruit-sorter
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      UV_PYTHON: '3.11'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            examples/fruit-sorter/uv.lock
+            packages/agent/uv.lock
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest

@@ -246,7 +246,7 @@ Hands over every other change and brings back corrections. It is also the device
 What the server expects of the agent, from the spec:
 
 - **Every 5 seconds**, and right away after the network comes back, the agent syncs. With nothing to send it still syncs, as the heartbeat and to fetch corrections.
-- **Irreversible decisions** go to `/decide`, the oldest 5 first, with a 10-second timeout. An item with `retry: true`, a timeout, or no network counts as an attempt; after 3 the agent cancels the decision (`cancelled_at`, `cancel_reason`) and syncs it.
+- **Irreversible decisions** go to `/decide`, the oldest 5 first, with a 10-second timeout. Only an item the server answers with `retry: true` counts as an attempt; after 3 the agent cancels the decision (`cancelled_at`, `cancel_reason`) and syncs it. An item with `retry: false` is cancelled at once. A timeout, a 5xx or no network is not an attempt: the decision keeps waiting and the agent asks again every round, however long the network is gone. Waiting for the network is what an irreversible decision is for, and giving up on it after a few seconds offline would throw away the very case the product exists for. A timeout is safe to retry: the server keeps the call running and returns its answer to the next request.
 - **Everything else** goes to `/sync`, 10 at a time: decisions the server hasn't seen or that changed since the last sync. Compare revisions, not clocks: the robot's clock may be off. The frame goes only the first time a decision is synced.
 - **Every change** bumps `revision` locally, and the next sync sends it.
 - **New corrections** are matched by `id`: one already known is skipped.
