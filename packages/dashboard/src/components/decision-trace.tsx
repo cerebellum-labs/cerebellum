@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 
 import type { Correction, DecisionView } from '@/api/types'
 import { Led } from '@/components/led'
+import { Skeleton } from '@/components/ui/skeleton'
 import { humanize, ledOf, modelName, type LedColor } from '@/lib/decision'
 import { clockTime, duration, percent } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -26,8 +27,11 @@ interface Step {
 
 const actionLight = (action: string | null) => ledOf({ status: 'executed', action })
 
-/** The decision's path as it happened: the robot, the server, the cloud model and back. */
-function stepsOf(d: DecisionView, corrections: Correction[]): Step[] {
+/**
+ * The decision's path as it happened: the robot, the server, the cloud model
+ * and back. Brief leaves out the cloud model's reasons.
+ */
+function stepsOf(d: DecisionView, corrections: Correction[], brief: boolean): Step[] {
   const t0 = Date.parse(d.decided_at)
   const local =
     d.local_model &&
@@ -66,7 +70,7 @@ function stepsOf(d: DecisionView, corrections: Correction[]): Step[] {
           {[d.model && modelName(d.model), d.confidence != null && `${percent(d.confidence)} sure`, d.latency_ms != null && `in ${duration(d.latency_ms)}`]
             .filter(Boolean)
             .join(', ')}
-          {d.reason && <q className="mt-1.5 block text-foreground/90 before:content-none after:content-none">{d.reason}</q>}
+          {d.reason && !brief && <q className="mt-1.5 block text-foreground/90 before:content-none after:content-none">{d.reason}</q>}
         </>
       ),
     })
@@ -94,7 +98,9 @@ function stepsOf(d: DecisionView, corrections: Correction[]): Step[] {
       detail: (
         <>
           {modelName(c.model)}
-          <q className="mt-1.5 block text-foreground/90 before:content-none after:content-none">{c.reason}</q>
+          {!brief && (
+            <q className="mt-1.5 block text-foreground/90 before:content-none after:content-none">{c.reason}</q>
+          )}
         </>
       ),
     })
@@ -116,9 +122,18 @@ function stepsOf(d: DecisionView, corrections: Correction[]): Step[] {
   return [...done, ...steps.filter((s) => s.at == null)]
 }
 
-export function Trace({ decision: d, corrections }: { decision: DecisionView; corrections: Correction[] }) {
+export function Trace({
+  decision: d,
+  corrections,
+  brief = false,
+}: {
+  decision: DecisionView
+  corrections: Correction[]
+  /** Without the cloud model's reasons, where the whole story is a click away. */
+  brief?: boolean
+}) {
   const t0 = Date.parse(d.decided_at)
-  const steps = stepsOf(d, corrections)
+  const steps = stepsOf(d, corrections, brief)
   const offlineBefore = steps.map((s, i) => {
     const prev = steps[i - 1]
     return s.sync && prev?.at != null && s.at != null && s.at - prev.at > OFFLINE_GAP_MS ? s.at - prev.at : null
@@ -164,6 +179,27 @@ export function Trace({ decision: d, corrections }: { decision: DecisionView; co
           </li>
         )
       })}
+    </ol>
+  )
+}
+
+/** The trace's shape while it loads: three steps down a thread. */
+export function TraceSkeleton() {
+  return (
+    <ol className="grid" aria-hidden>
+      {['w-44', 'w-36', 'w-52'].map((width, i) => (
+        <li key={width} className="relative grid grid-cols-[10px_minmax(0,1fr)_auto] gap-x-3 pb-4 last:pb-0">
+          {i < 2 && <span className="absolute top-4 bottom-0.5 left-[3.5px] w-px bg-border" />}
+          <span className="flex h-5 items-center">
+            <Skeleton className="size-2 rounded-full" />
+          </span>
+          <div className="grid gap-1.5 pt-1">
+            <Skeleton className={cn('h-3.5 max-w-full', width)} />
+            {i === 0 && <Skeleton className="h-3 w-28" />}
+          </div>
+          <Skeleton className="mt-1 h-3 w-10" />
+        </li>
+      ))}
     </ol>
   )
 }

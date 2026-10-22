@@ -39,6 +39,7 @@ type decisionIn struct {
 	Metadata            json.RawMessage `json:"metadata"`
 	LocalModel          *string         `json:"local_model"`
 	LocalConfidence     *float32        `json:"local_confidence"`
+	LocalLatencyMs      *int32          `json:"local_latency_ms"`
 	NeedsReview         bool            `json:"needs_review"`
 	DecidedAt           time.Time       `json:"decided_at"`
 	Action              *string         `json:"action"`

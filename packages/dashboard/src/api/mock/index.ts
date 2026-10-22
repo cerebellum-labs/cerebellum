@@ -2,6 +2,8 @@
 // journal and, while someone listens to events, a fruit sorter that keeps
 // deciding. It follows the server's rules from the spec closely enough that
 // the screens can be built and checked against it.
+import { cloudDisagreed } from '@/lib/decision'
+
 import type { DashboardApi, RobotEvent, RobotState, Simulator } from '../client'
 import { ApiError } from '../errors'
 import type {
@@ -69,11 +71,12 @@ export function createMockApi(): { api: DashboardApi; simulator: Simulator } {
     created_at: iso(now - 3 * 24 * 60 * MINUTE),
     deleted: false,
   }
+  // Idle since its session two hours ago, but its agent still syncs.
   const laptop: DeviceRecord = {
     id: newId(),
     key: 'laptop-1',
     name: 'Laptop webcam',
-    last_seen_at: iso(now - 2 * 60 * MINUTE),
+    last_seen_at: iso(now),
     agent_version: '0.1.0',
     metadata: { camera: 'facetime-hd' },
     created_at: iso(now - 24 * 60 * MINUTE),
@@ -176,8 +179,10 @@ export function createMockApi(): { api: DashboardApi; simulator: Simulator } {
 
   function heartbeat() {
     if (!robot.online) return
-    sorter.last_seen_at = iso(Date.now())
-    emit({ type: 'device.updated', device: deviceView(sorter) })
+    for (const device of [sorter, laptop]) {
+      device.last_seen_at = iso(Date.now())
+      emit({ type: 'device.updated', device: deviceView(device) })
+    }
   }
 
   /** Moves the parts of a decision that happen after the robot reached the server. */
@@ -286,9 +291,11 @@ export function createMockApi(): { api: DashboardApi; simulator: Simulator } {
     robot.online = online
     robot.offlineSince = online ? null : Date.now()
     if (!online) {
-      // The server stops hearing from the robot.
-      sorter.last_seen_at = iso(Date.now() - ONLINE_WINDOW_MS)
-      emit({ type: 'device.updated', device: deviceView(sorter) })
+      // The server stops hearing from the robots: they share the network.
+      for (const device of [sorter, laptop]) {
+        device.last_seen_at = iso(Date.now() - ONLINE_WINDOW_MS)
+        emit({ type: 'device.updated', device: deviceView(device) })
+      }
       robotChanged()
       return
     }
@@ -325,6 +332,10 @@ export function createMockApi(): { api: DashboardApi; simulator: Simulator } {
   }
 
   const api: DashboardApi = {
+    // In memory, the stream never breaks.
+    connection: () => 'open',
+    onConnection: () => () => {},
+
     async login(password) {
       await wait(250)
       if (!password) throw new ApiError(401, 'Enter the dashboard password.')
@@ -380,7 +391,7 @@ export function createMockApi(): { api: DashboardApi; simulator: Simulator } {
       emit({ type: 'device.updated', device: deviceView(device) })
     },
 
-    async listDecisions({ device_id, status, before, limit = 50 }: DecisionQuery): Promise<DecisionPage> {
+    async listDecisions({ device_id, status, source, changed, before, limit = 50 }: DecisionQuery): Promise<DecisionPage> {
       await wait(150)
       const size = Math.min(Math.max(limit, 1), 200)
       // The server pages by UUIDv7, which sorts by time; the mock's ids are
@@ -388,6 +399,7 @@ export function createMockApi(): { api: DashboardApi; simulator: Simulator } {
       const cursor = before ? decisions.get(before)?.decided_at : undefined
       const matching = [...decisions.values()]
         .filter((d) => (!device_id || d.device_id === device_id) && (!status || d.status === status))
+        .filter((d) => (!source || d.source === source) && (!changed || cloudDisagreed(d)))
         .filter((d) => !cursor || d.decided_at < cursor)
         .sort((a, b) => b.decided_at.localeCompare(a.decided_at))
       const page = matching.slice(0, size)

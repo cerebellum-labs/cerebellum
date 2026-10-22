@@ -7,13 +7,14 @@
 -- can touch another's. No row comes back when nothing was written.
 INSERT INTO decisions (
     id, device_id, revision, task, options, action_class, proposed_action, prompt,
-    metadata, local_model, local_confidence, needs_review, decided_at, action,
+    metadata, local_model, local_confidence, local_latency_ms, needs_review, decided_at, action,
     executed_at, cancelled_at, cancel_reason, correction_applied_at
 )
 VALUES (
     sqlc.arg(id), sqlc.arg(device_id), sqlc.arg(revision), sqlc.arg(task), sqlc.arg(options),
     sqlc.arg(action_class), sqlc.narg(proposed_action), sqlc.narg(prompt), sqlc.arg(metadata),
-    sqlc.narg(local_model), sqlc.narg(local_confidence), sqlc.arg(needs_review), sqlc.arg(decided_at),
+    sqlc.narg(local_model), sqlc.narg(local_confidence), sqlc.narg(local_latency_ms),
+    sqlc.arg(needs_review), sqlc.arg(decided_at),
     CASE WHEN sqlc.arg(action_class)::text = 'irreversible' THEN NULL ELSE sqlc.narg(action)::text END,
     sqlc.narg(executed_at), sqlc.narg(cancelled_at), sqlc.narg(cancel_reason),
     -- A new decision has no correction to apply. The row proposed here is

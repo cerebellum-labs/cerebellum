@@ -82,8 +82,10 @@ type Decision struct {
 	Prompt          *string         `json:"prompt"`
 	LocalModel      *string         `json:"local_model"`
 	LocalConfidence *float32        `json:"local_confidence"`
+	LocalLatencyMs  *int32          `json:"local_latency_ms"`
 	// The model behind the final action: the local one for a device
-	// decision, the cloud one for a server decision.
+	// decision, the cloud one for a server decision. LatencyMs is how long
+	// that model took.
 	Model        *string  `json:"model"`
 	Confidence   *float32 `json:"confidence"`
 	Reason       *string  `json:"reason"`
@@ -126,6 +128,7 @@ func NewDecision(r db.ListDecisionsRow) Decision {
 		Prompt:              d.Prompt,
 		LocalModel:          d.LocalModel,
 		LocalConfidence:     d.LocalConfidence,
+		LocalLatencyMs:      d.LocalLatencyMs,
 		CancelReason:        d.CancelReason,
 		HasFrame:            r.HasFrame,
 		DecidedAt:           Time(d.DecidedAt),
@@ -147,6 +150,7 @@ func NewDecision(r db.ListDecisionsRow) Decision {
 	} else {
 		v.Model = d.LocalModel
 		v.Confidence = d.LocalConfidence
+		v.LatencyMs = d.LocalLatencyMs
 	}
 	return v
 }

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 
 import { api } from '@/api/client'
 import type { ActionClass, DecisionView } from '@/api/types'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useRecentDecisions } from '@/hooks/use-recent-decisions'
 import { useRobot } from '@/hooks/use-robot'
 import { CLASS_LABEL, humanize } from '@/lib/decision'
@@ -35,7 +36,8 @@ const CLASSES: { key: ActionClass; icon: ReactNode; decides: string; offline: st
   },
 ]
 
-// One grid for the header and the rows; on phones each row stacks.
+// One grid for the header and the rows; on phones each row stacks, every
+// cell with its column's name.
 const ROW =
   'grid gap-x-6 gap-y-2 px-4 sm:px-5 md:grid-cols-[minmax(0,10rem)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_5rem] md:items-center'
 
@@ -57,12 +59,12 @@ export function ActionClasses() {
   const waitingNow = robot.queued || s?.by_status.waiting_for_server || 0
 
   return (
-    <section aria-labelledby="rules-title" className="grid gap-5">
+    <section aria-labelledby="rules-title" className="grid gap-6">
       <div className="grid gap-1">
         <h2 id="rules-title" className="text-xl font-semibold tracking-tight">
           The rules
         </h2>
-        <p className="text-muted-foreground">Every action of the robot belongs to one of three classes.</p>
+        <p className="text-sm text-muted-foreground">Every action of the robot belongs to one of three classes.</p>
       </div>
 
       <div role="table" aria-labelledby="rules-title" className="panel overflow-hidden">
@@ -70,7 +72,7 @@ export function ActionClasses() {
           <span role="columnheader">Class</span>
           <span role="columnheader">Who decides</span>
           <span role="columnheader">Without network</span>
-          <span role="columnheader">Actions seen</span>
+          <span role="columnheader">Actions taken</span>
           <span role="columnheader" className="text-right">
             Decisions
           </span>
@@ -84,9 +86,9 @@ export function ActionClasses() {
                 <span className="text-brand">{c.icon}</span>
                 {CLASS_LABEL[c.key]}
               </span>
-              <span role="cell">{c.decides}</span>
-              <span
-                role="cell"
+              <Cell label="Who decides">{c.decides}</Cell>
+              <Cell
+                label="Without network"
                 className={cn(
                   'flex items-center gap-2 transition-colors duration-500',
                   waiting ? 'text-led-amber' : !robot.online ? 'text-led-green' : 'text-muted-foreground',
@@ -98,9 +100,14 @@ export function ActionClasses() {
                   <Check className="size-4 shrink-0" aria-hidden />
                 )}
                 {waiting ? `${count(waitingNow)} waiting now` : !robot.online ? 'Working now' : c.offline}
-              </span>
-              <span role="cell" className="flex flex-wrap gap-1.5">
-                {actions.length ? (
+              </Cell>
+              <Cell label="Actions taken" className="flex flex-wrap gap-1.5">
+                {recent.isPending ? (
+                  <>
+                    <Skeleton className="h-6 w-14 rounded-[4px]" />
+                    <Skeleton className="h-6 w-16 rounded-[4px]" />
+                  </>
+                ) : actions.length ? (
                   actions.map((a) => (
                     <span key={a} className="rounded-[4px] border border-border-strong px-1.5 text-sm leading-6">
                       {humanize(a)}
@@ -109,14 +116,26 @@ export function ActionClasses() {
                 ) : (
                   <span className="text-faint">–</span>
                 )}
-              </span>
-              <span role="cell" className="readout text-muted-foreground md:text-right">
-                {s ? count(s.by_class[c.key]) : ''}
-              </span>
+              </Cell>
+              <Cell label="Decisions" className="readout text-muted-foreground md:flex md:justify-end">
+                {stats.isPending ? <Skeleton className="h-4 w-8" /> : s ? count(s.by_class[c.key]) : '–'}
+              </Cell>
             </div>
           )
         })}
       </div>
     </section>
+  )
+}
+
+/** A cell of the table; on phones its column's name stands before it. */
+function Cell({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <span role="cell" className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 md:block">
+      <span aria-hidden className="text-xs text-muted-foreground md:hidden">
+        {label}
+      </span>
+      <span className={className}>{children}</span>
+    </span>
   )
 }

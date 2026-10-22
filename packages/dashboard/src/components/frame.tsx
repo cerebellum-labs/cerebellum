@@ -21,12 +21,15 @@ export function Frame({
   id,
   hasFrame,
   viewfinder,
+  decorative,
   className,
 }: {
   id: string
   hasFrame: boolean
   /** Frame the picture like a camera's viewfinder, for the large view. */
   viewfinder?: boolean
+  /** A thumbnail next to text that already says what it shows: no alt text. */
+  decorative?: boolean
   className?: string
 }) {
   return (
@@ -39,13 +42,13 @@ export function Frame({
       {hasFrame ? (
         <img
           src={api.frameUrl(id)}
-          alt="What the robot's camera saw"
+          alt={decorative ? '' : "What the robot's camera saw"}
           loading="lazy"
           className="size-full object-cover"
         />
       ) : (
         <span className="flex size-full items-center justify-center text-faint">
-          <ImageBroken className="size-4" aria-label="No frame" />
+          <ImageBroken className="size-4" aria-label={decorative ? undefined : 'No frame'} aria-hidden={decorative} />
         </span>
       )}
       {viewfinder && <Corners />}

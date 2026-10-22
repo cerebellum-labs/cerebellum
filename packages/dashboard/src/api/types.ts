@@ -36,13 +36,16 @@ export interface Decision {
   prompt: string | null
   local_model: string | null
   local_confidence: number | null
+  /** How long the local model took, if the agent reports it. */
+  local_latency_ms: number | null
   /** The model behind the action: the local one on the device, the cloud one on the server. */
   model: string | null
   confidence: number | null
   /** The cloud model's explanation of a server decision. */
   reason: string | null
-  /** The cloud call of a server decision: how long it took and what it cost. */
+  /** How long that model took: the local one for a device decision, the cloud call for a server one. */
   latency_ms: number | null
+  /** The cloud call of a server decision: what it cost. */
   cost_usd: number | null
   input_tokens: number | null
   output_tokens: number | null
@@ -113,6 +116,9 @@ export type DashboardEvent =
 export interface DecisionQuery {
   device_id?: UUID
   status?: DecisionStatus
+  source?: DecisionSource
+  /** Only the decisions where the cloud disagreed with the robot: overruled or corrected. */
+  changed?: boolean
   /** next_before of the previous page. */
   before?: UUID
   /** 50 by default, at most 200. */

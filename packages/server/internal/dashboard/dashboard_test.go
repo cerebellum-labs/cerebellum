@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -159,8 +160,8 @@ func TestDevices(t *testing.T) {
 }
 
 // seedJournal adds a device with three decisions, oldest first: one decided
-// on the device with a frame, one decided by the server, and an uncertain
-// one the review corrected. It returns their ids in that order.
+// on the device with a frame, one the server decided against the robot's
+// proposal, and an uncertain one the review corrected. It returns their ids in that order.
 func seedJournal(t *testing.T, pool *pgxpool.Pool) (device uuid.UUID, ids [3]uuid.UUID) {
 	t.Helper()
 	ctx := t.Context()
@@ -175,11 +176,11 @@ func seedJournal(t *testing.T, pool *pgxpool.Pool) (device uuid.UUID, ids [3]uui
 	decideCall, reviewCall := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
 	args := pgx.NamedArgs{"device": device, "a": ids[0], "b": ids[1], "c": ids[2], "decide": decideCall, "review": reviewCall}
 	stmts := []string{
-		`INSERT INTO decisions (id, device_id, revision, task, options, action_class, action, proposed_action, local_model, local_confidence, decided_at)
-		 VALUES (@a, @device, 1, 'sort_item', '{basket,discard}', 'reversible', 'basket', 'basket', 'yolox-nano', 0.95, now())`,
+		`INSERT INTO decisions (id, device_id, revision, task, options, action_class, action, proposed_action, local_model, local_confidence, local_latency_ms, decided_at)
+		 VALUES (@a, @device, 1, 'sort_item', '{basket,discard}', 'reversible', 'basket', 'basket', 'yolox-nano', 0.95, 40, now())`,
 		`INSERT INTO frames (decision_id, jpeg) VALUES (@a, '\xffd8ffd9')`,
-		`INSERT INTO decisions (id, device_id, revision, task, options, action_class, prompt, decided_at)
-		 VALUES (@b, @device, 1, 'sort_item', '{basket,discard}', 'irreversible', 'Is it a fruit?', now())`,
+		`INSERT INTO decisions (id, device_id, revision, task, options, action_class, proposed_action, prompt, decided_at)
+		 VALUES (@b, @device, 1, 'sort_item', '{basket,discard}', 'irreversible', 'basket', 'Is it a fruit?', now())`,
 		`INSERT INTO model_calls (id, decision_id, purpose, model, action, confidence, reason, latency_ms, input_tokens, output_tokens, cost_usd)
 		 VALUES (@decide, @b, 'decide', 'nemotron', 'discard', 0.9, 'A paper cup.', 1800, 900, 40, 0.0002)`,
 		`UPDATE decisions SET action = 'discard', model_call_id = @decide WHERE id = @b`,
@@ -202,6 +203,7 @@ type decisionJSON struct {
 	Status          string    `json:"status"`
 	Source          *string   `json:"source"`
 	Model           *string   `json:"model"`
+	LatencyMs       *int32    `json:"latency_ms"`
 	Reason          *string   `json:"reason"`
 	CostUsd         *float64  `json:"cost_usd"`
 	CorrectedAction *string   `json:"corrected_action"`
@@ -241,7 +243,8 @@ func TestJournal(t *testing.T) {
 	if len(page.Decisions) != 1 || page.Decisions[0].ID != ids[0] || page.NextBefore != nil {
 		t.Fatalf("last page = %+v, next %v", page.Decisions, page.NextBefore)
 	}
-	if d := page.Decisions[0]; !d.HasFrame || d.Model == nil || *d.Model != "yolox-nano" || d.DeviceKey != "fruit-sorter-1" {
+	if d := page.Decisions[0]; !d.HasFrame || d.Model == nil || *d.Model != "yolox-nano" || d.DeviceKey != "fruit-sorter-1" ||
+		d.LatencyMs == nil || *d.LatencyMs != 40 {
 		t.Errorf("device decision = %+v", d)
 	}
 
@@ -249,7 +252,23 @@ func TestJournal(t *testing.T) {
 	if len(page.Decisions) != 1 || page.Decisions[0].ID != ids[2] || *page.Decisions[0].CorrectedAction != "discard" {
 		t.Errorf("corrected = %+v", page.Decisions)
 	}
-	for _, query := range []string{"status=done", "limit=0", "limit=201", "device_id=x", "before=x"} {
+	for query, want := range map[string][]uuid.UUID{
+		"source=device": {ids[2], ids[0]},
+		"source=server": {ids[1]},
+		// Overruled by the server, then corrected by the review.
+		"changed=true":  {ids[2], ids[1]},
+		"changed=false": {ids[2], ids[1], ids[0]},
+	} {
+		api.do(http.MethodGet, "/api/dashboard/decisions?"+query, "", &page)
+		got := make([]uuid.UUID, len(page.Decisions))
+		for i, d := range page.Decisions {
+			got[i] = d.ID
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("?%s = %v, want %v", query, got, want)
+		}
+	}
+	for _, query := range []string{"status=done", "source=robot", "changed=yes", "limit=0", "limit=201", "device_id=x", "before=x"} {
 		if code := api.do(http.MethodGet, "/api/dashboard/decisions?"+query, "", nil); code != http.StatusBadRequest {
 			t.Errorf("?%s: status %d, want 400", query, code)
 		}
@@ -300,12 +319,14 @@ func TestStats(t *testing.T) {
 	if stats.CostUsd < 0.000299 || stats.CostUsd > 0.000301 {
 		t.Errorf("cost = %v, want 0.0003", stats.CostUsd)
 	}
-	if avg := stats.AvgLatencyMs["server"]; avg == nil || *avg != 1800 || stats.AvgLatencyMs["device"] != nil {
-		t.Errorf("avg latency = %v / %v, want 1800 / null", avg, stats.AvgLatencyMs["device"])
+	// Only one device decision says how long the local model took.
+	if server, device := stats.AvgLatencyMs["server"], stats.AvgLatencyMs["device"]; server == nil || *server != 1800 ||
+		device == nil || *device != 40 {
+		t.Errorf("avg latency = %v / %v, want 1800 / 40", server, device)
 	}
 
 	api.do(http.MethodGet, "/api/dashboard/stats?device_id="+uuid.Must(uuid.NewV7()).String(), "", &stats)
-	if stats.Total != 0 || stats.AvgLatencyMs["server"] != nil {
+	if stats.Total != 0 || stats.AvgLatencyMs["server"] != nil || stats.AvgLatencyMs["device"] != nil {
 		t.Errorf("another device's stats = %+v", stats)
 	}
 }

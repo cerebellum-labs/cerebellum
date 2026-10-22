@@ -200,15 +200,16 @@ func (q *Queries) UpdateDeviceInfo(ctx context.Context, arg UpdateDeviceInfoPara
 const upsertDecision = `-- name: UpsertDecision :one
 INSERT INTO decisions (
     id, device_id, revision, task, options, action_class, proposed_action, prompt,
-    metadata, local_model, local_confidence, needs_review, decided_at, action,
+    metadata, local_model, local_confidence, local_latency_ms, needs_review, decided_at, action,
     executed_at, cancelled_at, cancel_reason, correction_applied_at
 )
 VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9,
-    $10, $11, $12, $13,
-    CASE WHEN $6::text = 'irreversible' THEN NULL ELSE $14::text END,
-    $15, $16, $17,
+    $10, $11, $12,
+    $13, $14,
+    CASE WHEN $6::text = 'irreversible' THEN NULL ELSE $15::text END,
+    $16, $17, $18,
     -- A new decision has no correction to apply. The row proposed here is
     -- checked even when it conflicts, so the value goes in by the update.
     NULL
@@ -218,7 +219,7 @@ SET revision              = excluded.revision,
     executed_at           = excluded.executed_at,
     cancelled_at          = excluded.cancelled_at,
     cancel_reason         = excluded.cancel_reason,
-    correction_applied_at = $18::timestamptz
+    correction_applied_at = $19::timestamptz
 WHERE decisions.device_id = excluded.device_id
   AND excluded.revision > decisions.revision
 RETURNING id
@@ -236,6 +237,7 @@ type UpsertDecisionParams struct {
 	Metadata            json.RawMessage
 	LocalModel          *string
 	LocalConfidence     *float32
+	LocalLatencyMs      *int32
 	NeedsReview         bool
 	DecidedAt           time.Time
 	Action              *string
@@ -264,6 +266,7 @@ func (q *Queries) UpsertDecision(ctx context.Context, arg UpsertDecisionParams) 
 		arg.Metadata,
 		arg.LocalModel,
 		arg.LocalConfidence,
+		arg.LocalLatencyMs,
 		arg.NeedsReview,
 		arg.DecidedAt,
 		arg.Action,

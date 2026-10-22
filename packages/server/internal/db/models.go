@@ -37,6 +37,7 @@ type Decision struct {
 	CorrectionAppliedAt *time.Time
 	Source              *string
 	Status              string
+	LocalLatencyMs      *int32
 }
 
 type Device struct {

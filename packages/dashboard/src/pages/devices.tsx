@@ -7,6 +7,7 @@ import { api, ApiError } from '@/api/client'
 import type { DeviceView } from '@/api/types'
 import { useAdmin } from '@/app/context'
 import { Led } from '@/components/led'
+import { LoadError } from '@/components/load-error'
 import { PageHeader } from '@/components/page-header'
 import {
   AlertDialog,
@@ -31,14 +32,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useNow } from '@/hooks/use-now'
-import { fullTime, timeAgo } from '@/lib/format'
+import { day, fullTime, timeAgo } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 // The header and every row share one grid; below desktop width a row stacks under its name.
 const COLUMNS = cn(
   'grid items-center gap-x-4 gap-y-2 px-4 sm:px-5',
   'grid-cols-[10px_minmax(0,1fr)]',
-  'lg:grid-cols-[10px_minmax(0,1.4fr)_minmax(0,1fr)_5rem_9rem_13rem]',
+  'lg:grid-cols-[10px_minmax(0,1fr)_minmax(0,14rem)_5rem_6rem_9rem]',
 )
 
 type Confirm = { kind: 'rotate' | 'delete'; device: DeviceView }
@@ -95,14 +96,9 @@ export function DevicesPage() {
       )}
 
       {devices.isPending ? (
-        <Skeleton className="h-40 w-full rounded-lg" />
+        <DevicesSkeleton />
       ) : devices.isError ? (
-        <div className="panel p-6 text-sm">
-          <p className="font-medium">The devices didn't load.</p>
-          <Button variant="outline" size="sm" className="mt-4" onClick={() => devices.refetch()}>
-            Try again
-          </Button>
-        </div>
+        <LoadError what="The devices" onRetry={() => devices.refetch()} className="panel p-6" />
       ) : devices.data.length === 0 ? (
         <div className="panel p-6 text-sm">
           <p className="font-medium">No devices yet.</p>
@@ -126,25 +122,31 @@ export function DevicesPage() {
                   <Link to={`/journal?device=${device.id}`} className="w-fit font-medium hover:underline">
                     {device.name}
                   </Link>
-                  <code className="readout text-xs break-all text-muted-foreground">{device.key}</code>
-                  {Object.keys(device.metadata).length > 0 && (
-                    <p className="readout text-xs break-words text-muted-foreground">
-                      {Object.entries(device.metadata)
-                        .map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`)
-                        .join('  ')}
-                    </p>
-                  )}
+                  <p className="flex min-w-0 flex-wrap gap-x-2 text-xs text-muted-foreground">
+                    <code className="readout break-all">{device.key}</code>
+                    {/* What the agent reports about the robot, values only:
+                        "Raspberry Pi 5 · usb-640x480". */}
+                    {Object.values(device.metadata).map((v, i) => (
+                      <span key={i} className="before:mr-2 before:content-['·']">
+                        {typeof v === 'string' ? v : JSON.stringify(v)}
+                      </span>
+                    ))}
+                  </p>
                 </div>
                 <p className={cn('max-lg:col-start-2', device.online ? 'text-foreground' : 'text-muted-foreground')}>
                   {device.online
                     ? 'Online'
                     : device.last_seen_at
                       ? `Last seen ${timeAgo(device.last_seen_at, now)}`
-                      : 'Never connected'}
+                      : 'Never connected: start its agent with the token'}
                 </p>
                 <p className="readout text-muted-foreground max-lg:hidden">{device.agent_version ?? '–'}</p>
-                <p className="readout text-muted-foreground max-lg:hidden">{fullTime(device.created_at)}</p>
-                <div className="flex gap-2 max-lg:col-start-2 lg:justify-end">
+                <p className="text-muted-foreground max-lg:hidden" title={fullTime(device.created_at)}>
+                  {day(device.created_at)}
+                </p>
+                {/* Deleting is rare: a quiet icon that turns red on hover, not
+                    a red button on every row. */}
+                <div className="flex items-center gap-1 max-lg:col-start-2 lg:justify-end">
                   <Button
                     variant="outline"
                     size="sm"
@@ -153,12 +155,14 @@ export function DevicesPage() {
                     <Key /> New token
                   </Button>
                   <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Delete ${device.name}`}
+                    title="Delete"
+                    className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => admin.whenSignedIn(() => setConfirm({ kind: 'delete', device }))}
                   >
-                    <Trash /> Delete
+                    <Trash />
                   </Button>
                 </div>
               </li>
@@ -210,6 +214,19 @@ export function DevicesPage() {
   )
 }
 
+/**
+ * A device key as the server takes it, from anything typed: lowercase
+ * letters and digits with single dashes, like "Bench arm 1" → "bench-arm-1".
+ * A trailing dash stays while typing; the key sent drops it.
+ */
+function toKey(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+/, '')
+    .slice(0, 64)
+}
+
 function AddDeviceDialog({
   open,
   onOpenChange,
@@ -222,14 +239,17 @@ function AddDeviceDialog({
   const admin = useAdmin()
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
-  const [key, setKey] = useState('')
+  // Follows the name until the key is edited by hand.
+  const [typedKey, setTypedKey] = useState<string | null>(null)
+  const shownKey = typedKey ?? toKey(name)
+  const key = shownKey.replace(/-+$/, '')
 
   const create = useMutation({
-    mutationFn: () => api.createDevice({ key: key.trim(), name: name.trim() }),
+    mutationFn: () => api.createDevice({ key, name: name.trim() }),
     onSuccess: ({ device, token }) => {
       void queryClient.invalidateQueries({ queryKey: ['devices'] })
       setName('')
-      setKey('')
+      setTypedKey(null)
       onAdded(device, token)
     },
     onError: (err) => {
@@ -262,7 +282,7 @@ function AddDeviceDialog({
             <Label htmlFor="device-name">Name</Label>
             <Input
               id="device-name"
-              placeholder="Fruit sorter"
+              placeholder="e.g. Fruit sorter"
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoFocus
@@ -272,18 +292,19 @@ function AddDeviceDialog({
             <Label htmlFor="device-key">Key</Label>
             <Input
               id="device-key"
-              placeholder="fruit-sorter-2"
-              value={key}
-              onChange={(e) => setKey(e.target.value.toLowerCase())}
+              placeholder="e.g. fruit-sorter-2"
+              value={shownKey}
+              onChange={(e) => setTypedKey(toKey(e.target.value))}
+              className="font-mono"
               aria-invalid={error ? true : undefined}
               aria-describedby="device-key-hint"
             />
             <p id="device-key-hint" className={error ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
-              {error ? error.message : 'Unique and readable: lowercase letters, digits and dashes.'}
+              {error ? error.message : 'Made from the name; unique, with lowercase letters, digits and dashes.'}
             </p>
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={create.isPending || !key.trim()}>
+            <Button type="submit" disabled={create.isPending || !key}>
               {create.isPending ? 'Adding…' : 'Add device'}
             </Button>
           </DialogFooter>
@@ -293,52 +314,89 @@ function AddDeviceDialog({
   )
 }
 
+/** Where the agent reaches the API: the API origin the dashboard itself uses. */
+const API_URL = import.meta.env.VITE_API_URL || window.location.origin
+
 function TokenDialog({ issued, onClose }: { issued: Issued | null; onClose: () => void }) {
   const [copied, setCopied] = useState(false)
+  const env = issued ? `CEREBELLUM_URL=${API_URL}\nCEREBELLUM_TOKEN=${issued.token}` : ''
 
   async function copy() {
-    if (!issued) return
-    await navigator.clipboard.writeText(issued.token)
+    await navigator.clipboard.writeText(env)
     setCopied(true)
+  }
+  function close() {
+    setCopied(false)
+    onClose()
   }
 
   return (
-    <Dialog
-      open={Boolean(issued)}
-      onOpenChange={(open) => {
-        if (!open) {
-          setCopied(false)
-          onClose()
-        }
-      }}
-    >
-      <DialogContent className="sm:max-w-lg">
+    <Dialog open={Boolean(issued)} onOpenChange={(open) => !open && close()}>
+      <DialogContent
+        className="sm:max-w-lg"
+        // The token is shown once: a stray click or Esc must not lose it
+        // before it is copied. Done and the close button still close.
+        onInteractOutside={(e) => !copied && e.preventDefault()}
+        onEscapeKeyDown={(e) => !copied && e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>
             {issued?.isNew ? `${issued.device.name} is added` : `New token for ${issued?.device.name}`}
           </DialogTitle>
           <DialogDescription>
-            Copy the token now: it won't be shown again. Put it on the robot as CEREBELLUM_TOKEN in its .env file.
+            Put these lines in the robot's <code className="readout text-foreground">.env</code> and start its agent. The
+            token won't be shown again.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex gap-2">
-          <Input readOnly value={issued?.token ?? ''} aria-label="Device token" className="font-mono text-xs" onFocus={(e) => e.target.select()} />
-          <Button variant="outline" onClick={copy}>
-            {copied ? <Check /> : <Copy />}
-            {copied ? 'Copied' : 'Copy'}
-          </Button>
-        </div>
-        <DialogFooter>
-          <Button
-            onClick={() => {
-              setCopied(false)
-              onClose()
-            }}
-          >
+        <pre className="readout rounded-md border bg-background p-3 text-xs leading-relaxed break-all whitespace-pre-wrap text-foreground select-all">
+          {env}
+        </pre>
+        <DialogFooter className="sm:justify-between">
+          {/* Copying comes first; once it's done, closing does. Copy is last
+              so it sits on top on phones and on the right on wide screens. */}
+          <Button variant={copied ? 'default' : 'outline'} onClick={close}>
             Done
+          </Button>
+          <Button variant={copied ? 'outline' : 'default'} onClick={copy}>
+            {copied ? <Check /> : <Copy />}
+            {copied ? 'Copied' : 'Copy both lines'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** The device list's rows while it loads, in the same columns. */
+function DevicesSkeleton() {
+  return (
+    <div className="panel overflow-clip" aria-busy aria-label="Loading the devices">
+      <div aria-hidden className={cn(COLUMNS, 'hidden h-9 border-b lg:grid')}>
+        <span />
+        <Skeleton className="h-3 w-12" />
+        <Skeleton className="h-3 w-10" />
+        <Skeleton className="h-3 w-10" />
+        <Skeleton className="h-3 w-10" />
+        <span />
+      </div>
+      <ul className="divide-y" aria-hidden>
+        {['w-32', 'w-40'].map((width) => (
+          <li key={width} className={cn(COLUMNS, 'py-3.5')}>
+            <Skeleton className="size-2.5 rounded-full max-lg:mt-1.5 max-lg:self-start" />
+            <div className="grid gap-2">
+              <Skeleton className={cn('h-4', width)} />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            <Skeleton className="h-4 w-24 max-lg:col-start-2" />
+            <Skeleton className="h-4 w-12 max-lg:hidden" />
+            <Skeleton className="h-4 w-14 max-lg:hidden" />
+            <div className="flex gap-1 max-lg:col-start-2 lg:justify-end">
+              <Skeleton className="h-8 w-28" />
+              <Skeleton className="size-8" />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

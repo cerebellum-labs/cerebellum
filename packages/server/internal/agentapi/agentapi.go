@@ -159,6 +159,7 @@ func (h *Handler) save(ctx context.Context, device uuid.UUID, item itemIn) error
 		Metadata:            orEmptyObject(d.Metadata),
 		LocalModel:          d.LocalModel,
 		LocalConfidence:     d.LocalConfidence,
+		LocalLatencyMs:      d.LocalLatencyMs,
 		NeedsReview:         d.NeedsReview,
 		DecidedAt:           d.DecidedAt,
 		Action:              d.Action,

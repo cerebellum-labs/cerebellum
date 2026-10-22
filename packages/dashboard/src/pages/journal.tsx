@@ -1,36 +1,54 @@
-import { Cloud, Cpu } from '@phosphor-icons/react'
+import { ArrowUp, Cloud, Cpu } from '@phosphor-icons/react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
 
-import { api } from '@/api/client'
-import type { DecisionStatus, DecisionView } from '@/api/types'
+import { api, type Connection } from '@/api/client'
+import type { DecisionQuery, DecisionView } from '@/api/types'
 import { useLive } from '@/app/context'
 import { DecisionOutcome } from '@/components/decision-outcome'
 import { DeviceSelect } from '@/components/device-select'
 import { Frame } from '@/components/frame'
 import { Led } from '@/components/led'
 import { LightLegend } from '@/components/light-legend'
+import { LoadError } from '@/components/load-error'
 import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useConnection } from '@/hooks/use-connection'
+import { useHeldRows } from '@/hooks/use-held-rows'
 import { useMediaQuery } from '@/hooks/use-media-query'
-import { ledOf, modelName, SOURCE_LABEL, STATUSES, STATUS_LABEL } from '@/lib/decision'
+import { LIGHT, ledOf, modelName, SOURCE_LABEL, STATUS_LABEL } from '@/lib/decision'
 import { clockTime, count, duration, percent, usd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { DecisionPanel } from './decision-panel'
 
 const ALL = 'all'
 
+/**
+ * The journal's filter, by who decided and what came of it; `?show=` keeps
+ * it in the link. "Changed" is every time the cloud disagreed with the robot.
+ */
+const SHOW = {
+  device: { label: 'Decided on the robot', query: { source: 'device' } },
+  server: { label: 'Decided in the cloud', query: { source: 'server' } },
+  changed: { label: 'Changed by the cloud', query: { changed: true } },
+  waiting: { label: 'Asking the cloud', query: { status: 'waiting_for_server' } },
+  cancelled: { label: 'Cancelled', query: { status: 'cancelled' } },
+} satisfies Record<string, { label: string; query: DecisionQuery }>
+
+type Show = keyof typeof SHOW
+const isShow = (value: string | null): value is Show => value != null && value in SHOW
+
 // One grid for the header and every row, sized by the table's own width (it
-// shares the screen with the inspector). Narrow: the light, the frame, the
-// outcome and the time. Medium adds who decided and how long it took; wide
+// shares the screen with the inspector). Narrow: the light, the frame and the
+// outcome, with the time under it. Medium adds who decided and how long it took; wide
 // adds confidence and cost.
 const COLUMNS = cn(
   'grid items-center gap-x-3 px-3 sm:px-4',
-  'grid-cols-[10px_64px_minmax(0,1fr)_auto]',
+  'grid-cols-[10px_80px_minmax(0,1fr)]',
   '@2xl:grid-cols-[10px_72px_64px_minmax(0,1fr)_minmax(0,11rem)_5rem] @2xl:gap-x-4',
   '@4xl:grid-cols-[10px_72px_72px_minmax(0,1fr)_minmax(0,12rem)_4rem_5rem_5.5rem]',
 )
@@ -38,14 +56,16 @@ const COLUMNS = cn(
 export function JournalPage() {
   const [params, setParams] = useSearchParams()
   const deviceId = params.get('device') ?? undefined
-  const status = (params.get('status') as DecisionStatus | null) ?? undefined
+  const showParam = params.get('show')
+  const show = isShow(showParam) ? showParam : undefined
   const selected = params.get('decision')
   const wide = useMediaQuery('(min-width: 1024px)')
 
   const devices = useQuery({ queryKey: ['devices'], queryFn: () => api.listDevices() })
   const journal = useInfiniteQuery({
-    queryKey: ['decisions', { deviceId, status }],
-    queryFn: ({ pageParam }) => api.listDecisions({ device_id: deviceId, status, before: pageParam ?? undefined }),
+    queryKey: ['decisions', { deviceId, show }],
+    queryFn: ({ pageParam }) =>
+      api.listDecisions({ ...(show && SHOW[show].query), device_id: deviceId, before: pageParam ?? undefined }),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_before,
   })
@@ -63,21 +83,52 @@ export function JournalPage() {
     )
   }
 
-  const filtered = Boolean(deviceId || status)
+  const filtered = Boolean(deviceId || show)
   const closeDecision = () => setParam('decision', null)
+
+  // New decisions arrive on top. While the reader is busy with the list
+  // (pointer over it, scrolled down, a decision open), they wait behind a
+  // count instead of moving the rows under the pointer.
+  const [pointerOver, setPointerOver] = useState(false)
+  const scrolled = useScrolledPast(160)
+  const { shown, held, release } = useHeldRows(rows, pointerOver || scrolled || Boolean(selected))
+
+  // ↑/↓ or j/k move through the journal, Esc closes the open decision.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
+      const target = e.target as HTMLElement
+      if (target.closest('input, textarea, select, [role="combobox"], [role="listbox"], [role="dialog"], [contenteditable]')) {
+        return
+      }
+      if (e.key === 'Escape' && selected) {
+        setParam('decision', null)
+        return
+      }
+      const step = e.key === 'ArrowDown' || e.key === 'j' ? 1 : e.key === 'ArrowUp' || e.key === 'k' ? -1 : 0
+      if (!step || shown.length === 0) return
+      e.preventDefault()
+      const at = shown.findIndex((d) => d.id === selected)
+      const next = shown[at === -1 ? 0 : Math.min(Math.max(at + step, 0), shown.length - 1)]
+      setParam('decision', next.id)
+      const row = document.getElementById(rowId(next.id))
+      row?.focus({ preventScroll: true })
+      row?.scrollIntoView({ block: 'nearest' })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  // A failed "Show older" puts the query in its error state with the
+  // pages already loaded: those stay, with a retry below them.
+  const olderFailed = journal.isFetchNextPageError
+  const fetchOlder = () => void journal.fetchNextPage()
 
   let body: ReactNode
   if (journal.isPending) {
     body = <JournalSkeleton />
-  } else if (journal.isError) {
-    body = (
-      <Notice title="The journal didn't load.">
-        <p>Check that the server is reachable, then try again.</p>
-        <Button variant="outline" size="sm" className="mt-4" onClick={() => journal.refetch()}>
-          Try again
-        </Button>
-      </Notice>
-    )
+  } else if (journal.isError && !olderFailed) {
+    body = <LoadError what="The journal" onRetry={() => journal.refetch()} className="p-6" />
   } else if (rows.length === 0) {
     body = filtered ? (
       <Notice title="No decisions match these filters.">
@@ -109,8 +160,18 @@ export function JournalPage() {
           <span className="text-right">Took</span>
           <span className="hidden text-right @4xl:block">Cost</span>
         </div>
+        {held > 0 && (
+          <button
+            type="button"
+            onClick={release}
+            className="flex h-9 w-full items-center justify-center gap-1.5 border-b bg-brand/[0.07] text-sm font-medium text-foreground transition-colors hover:bg-brand/[0.12] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+          >
+            <ArrowUp className="size-4" aria-hidden />
+            {count(held)} new {held === 1 ? 'decision' : 'decisions'}
+          </button>
+        )}
         <ol className="divide-y">
-          {rows.map((d) => (
+          {shown.map((d) => (
             <DecisionRow
               key={d.id}
               decision={d}
@@ -120,14 +181,16 @@ export function JournalPage() {
             />
           ))}
         </ol>
-        <div className="flex h-11 items-center justify-between border-t px-3 text-xs text-muted-foreground sm:px-4">
-          <span className="readout">{count(rows.length)} shown</span>
-          {journal.hasNextPage && (
+        <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 border-t px-3 text-xs text-muted-foreground sm:px-4">
+          <span className="readout">{count(shown.length)} shown</span>
+          {olderFailed ? (
+            <LoadError compact what="Older decisions" onRetry={fetchOlder} className="text-xs" />
+          ) : journal.hasNextPage && (
             <Button
               variant="ghost"
               size="sm"
               disabled={journal.isFetchingNextPage}
-              onClick={() => journal.fetchNextPage()}
+              onClick={fetchOlder}
             >
               {journal.isFetchingNextPage ? 'Loading…' : 'Show older'}
             </Button>
@@ -145,29 +208,33 @@ export function JournalPage() {
         description="Every decision with its frame, who made it and how long it took."
       >
         <DeviceSelect value={deviceId} onChange={(id) => setParam('device', id)} />
+        <Select value={show ?? ALL} onValueChange={(v) => setParam('show', v === ALL ? null : v)}>
+          <SelectTrigger className="w-full sm:w-52" aria-label="Show">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="end">
+            <SelectItem value={ALL}>All decisions</SelectItem>
+            {(Object.keys(SHOW) as Show[]).map((key) => (
+              <SelectItem key={key} value={key}>
+                {SHOW[key].label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </PageHeader>
 
-
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
-        <section aria-labelledby="decisions-title" className="panel @container min-w-0 overflow-clip">
+        <section
+          aria-labelledby="decisions-title"
+          className="panel @container min-w-0 overflow-clip"
+          onPointerEnter={(e) => e.pointerType === 'mouse' && setPointerOver(true)}
+          onPointerLeave={() => setPointerOver(false)}
+        >
           <div className="flex h-12 items-center gap-3 border-b px-3 sm:px-4">
             <h2 id="decisions-title" className="text-sm font-medium">
               Decisions
             </h2>
             <LiveBadge />
-            <Select value={status ?? ALL} onValueChange={(v) => setParam('status', v === ALL ? null : v)}>
-              <SelectTrigger size="sm" className="ml-auto w-44" aria-label="Status">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper" align="end">
-                <SelectItem value={ALL}>All statuses</SelectItem>
-                {STATUSES.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {STATUS_LABEL[s]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
           {body}
         </section>
@@ -195,15 +262,30 @@ export function JournalPage() {
   )
 }
 
-/** New decisions stream in while the page is open. */
+const LIVE_LABEL: Record<Connection, string> = {
+  open: 'Live',
+  connecting: 'Connecting',
+  reconnecting: 'Reconnecting',
+}
+
+/**
+ * Whether new decisions stream in right now: green while the event stream is
+ * open, amber while it opens or comes back after a break.
+ */
 function LiveBadge() {
+  const connection = useConnection()
+  const live = connection === 'open'
   return (
-    <span className="flex items-center gap-1.5 rounded-[4px] border border-border-strong px-2 py-0.5 text-xs text-muted-foreground">
-      <span aria-hidden className="relative flex size-2">
-        <span className="absolute inline-flex size-full animate-ping rounded-full bg-led-green opacity-70" />
-        <span className="relative size-2 rounded-full bg-led-green" />
-      </span>
-      Live
+    <span
+      role="status"
+      title={live ? 'New decisions appear as they happen.' : 'New decisions appear once the connection is back.'}
+      className="flex items-center gap-1.5 rounded-[4px] border border-border-strong px-2 py-0.5 text-xs text-muted-foreground"
+    >
+      <span
+        aria-hidden
+        className={cn('size-2 rounded-full', live ? 'bg-led-green' : 'animate-pulse bg-led-amber')}
+      />
+      {LIVE_LABEL[connection]}
     </span>
   )
 }
@@ -233,10 +315,13 @@ function DecisionRow({
   const changed = live.changed.has(d.id)
   const dash = <span className="text-faint">–</span>
   const SourceIcon = d.source === 'server' ? Cloud : Cpu
+  const light = ledOf(d)
+  const sure = d.source === 'server' ? 'The cloud model' : "The robot's model"
 
   return (
     <li className={cn(added && 'animate-in duration-500 fade-in-0 slide-in-from-top-2')}>
       <button
+        id={rowId(d.id)}
         type="button"
         onClick={onSelect}
         aria-current={selected || undefined}
@@ -248,20 +333,22 @@ function DecisionRow({
           selected && 'bg-brand/[0.08] shadow-[inset_3px_0_0_var(--brand)]',
         )}
       >
-        <Led color={ledOf(d)} />
-        <time
-          dateTime={d.decided_at}
-          className="readout order-last self-start pt-0.5 text-xs text-muted-foreground @2xl:order-none @2xl:self-center @2xl:pt-0"
-        >
+        <Led color={light} title={`${LIGHT[light].lit}: ${LIGHT[light].meaning}`} />
+        <time dateTime={d.decided_at} className="readout hidden text-xs text-muted-foreground @2xl:block">
           {clockTime(d.decided_at)}
         </time>
-        <Frame id={d.id} hasFrame={d.has_frame} className="w-full rounded-[5px]" />
+        <Frame id={d.id} hasFrame={d.has_frame} decorative className="w-full rounded-[5px]" />
         <span className="grid min-w-0 gap-0.5">
           <span className="truncate font-medium">
             <DecisionOutcome decision={d} />
           </span>
+          {/* Done is most decisions: only a status that says something more
+              is written out. Narrow, the time and how long it took join it. */}
           <span className="flex min-w-0 gap-x-3 truncate text-xs text-muted-foreground">
-            <span className={cn(d.status === 'waiting_for_server' && 'text-led-amber')}>{STATUS_LABEL[d.status]}</span>
+            <span className="readout @2xl:hidden">{clockTime(d.decided_at)}</span>
+            {d.status !== 'executed' && (
+              <span className={cn(d.status === 'waiting_for_server' && 'text-led-amber')}>{STATUS_LABEL[d.status]}</span>
+            )}
             {showDevice && <span className="truncate">{d.device_name}</span>}
             {d.latency_ms != null && <span className="readout @2xl:hidden">{duration(d.latency_ms)}</span>}
           </span>
@@ -281,16 +368,43 @@ function DecisionRow({
             dash
           )}
         </span>
-        <span className="readout hidden text-right @4xl:block">
+        <span
+          className="readout hidden text-right @4xl:block"
+          title={d.confidence != null ? `${sure} was ${percent(d.confidence)} sure` : undefined}
+        >
+          <span className="sr-only">{sure} was </span>
           {d.confidence != null ? percent(d.confidence) : dash}
+          <span className="sr-only"> sure</span>
         </span>
         <span className="readout hidden text-right @2xl:block">
+          <span className="sr-only">Took </span>
           {d.latency_ms != null ? duration(d.latency_ms) : dash}
         </span>
-        <span className="readout hidden text-right @4xl:block">{d.cost_usd ? usd(d.cost_usd) : dash}</span>
+        <span className="readout hidden text-right @4xl:block">
+          {/* A decision on the robot costs nothing: left blank, not dashed. */}
+          {d.cost_usd ? (
+            <>
+              <span className="sr-only">Cost </span>
+              {usd(d.cost_usd)}
+            </>
+          ) : null}
+        </span>
       </button>
     </li>
   )
+}
+
+const rowId = (id: string) => `decision-row-${id}`
+
+/** Whether the page is scrolled more than `px` down. */
+function useScrolledPast(px: number): boolean {
+  const [past, setPast] = useState(() => window.scrollY > px)
+  useEffect(() => {
+    const onScroll = () => setPast(window.scrollY > px)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [px])
+  return past
 }
 
 function JournalSkeleton() {

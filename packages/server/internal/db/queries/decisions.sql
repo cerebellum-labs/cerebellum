@@ -1,6 +1,8 @@
 -- name: ListDecisions :many
 -- ListDecisions pages through the journal, newest first: the next page
--- starts before the last id of this one. Every filter is optional.
+-- starts before the last id of this one. Every filter is optional:
+-- changed keeps the decisions where the cloud disagreed with the robot,
+-- by overruling its proposal or by correcting it afterwards.
 -- GetDecision selects the same columns, so their rows convert into each
 -- other: keep the two in step.
 SELECT sqlc.embed(d),
@@ -23,6 +25,10 @@ LEFT JOIN model_calls mc ON mc.id = d.model_call_id
 LEFT JOIN model_calls rc ON rc.id = d.review_call_id
 WHERE (sqlc.narg(device_id)::uuid IS NULL OR d.device_id = sqlc.narg(device_id)::uuid)
   AND (sqlc.narg(status)::text IS NULL OR d.status = sqlc.narg(status)::text)
+  AND (sqlc.narg(source)::text IS NULL OR d.source = sqlc.narg(source)::text)
+  AND (NOT sqlc.arg(changed)::boolean
+       OR d.corrected_action IS NOT NULL
+       OR (d.source = 'server' AND d.proposed_action IS NOT NULL AND d.proposed_action <> d.action))
   AND (sqlc.narg(before)::uuid IS NULL OR d.id < sqlc.narg(before)::uuid)
 ORDER BY d.id DESC
 LIMIT sqlc.arg(row_limit);
@@ -67,7 +73,10 @@ SELECT count(*) AS total,
        count(*) FILTER (WHERE action_class = 'reflex')       AS class_reflex,
        count(*) FILTER (WHERE action_class = 'reversible')   AS class_reversible,
        count(*) FILTER (WHERE action_class = 'irreversible') AS class_irreversible,
-       count(*) FILTER (WHERE corrected_action IS NOT NULL)  AS corrections
+       count(*) FILTER (WHERE corrected_action IS NOT NULL)  AS corrections,
+       -- The average means nothing while device_latencies is 0.
+       count(local_latency_ms) FILTER (WHERE source = 'device') AS device_latencies,
+       coalesce(avg(local_latency_ms) FILTER (WHERE source = 'device'), 0)::float8 AS avg_device_latency_ms
 FROM decisions
 WHERE sqlc.narg(device_id)::uuid IS NULL OR device_id = sqlc.narg(device_id)::uuid;
 

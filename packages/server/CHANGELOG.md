@@ -11,5 +11,7 @@ All notable changes to the Cerebellum server are listed here, in the [Keep a Cha
 - PostgreSQL 18 database, required: `DATABASE_URL`. The server applies its migrations on start.
 - Agent API under `/api/v1`, see [AGENT_API.md](AGENT_API.md): `/decide` asks the cloud model for irreversible decisions, `/sync` takes everything else and returns corrections. Devices sign in with their token. Uncertain decisions are reviewed in the background, and a review that disagrees becomes a correction. `/decide` asks without reasoning for a quick answer; the review lets the model reason. Replies are requested in JSON mode. The cloud model is set by `NEBIUS_API_KEY`, with `NEBIUS_BASE_URL`, `MODEL_ID` and the `MODEL_PRICE_*_PER_M` prices defaulting to Nemotron 3.5 Super VL on Nebius Token Factory.
 - Dashboard API under `/api/dashboard`: devices, the journal of decisions with frames, statistics and a WebSocket stream of changes. Changing devices takes `ADMIN_PASSWORD`; the session is a cookie signed with `SESSION_SECRET`. `DASHBOARD_ORIGIN` lets a dashboard on a host of its own call the API.
+- `local_latency_ms` in the decision the agent sends: how long the local model took. It comes back as `latency_ms` of a device decision, and the dashboard's statistics average it.
+- The journal filters by `source`, and `changed=true` keeps the decisions where the cloud disagreed with the robot.
 
 [Unreleased]: https://github.com/cerebellum-labs/cerebellum/commits/main/packages/server

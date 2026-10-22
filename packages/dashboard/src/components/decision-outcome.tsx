@@ -1,4 +1,4 @@
-import { ArrowRight } from '@phosphor-icons/react'
+import { ArrowRight, ArrowUUpRight } from '@phosphor-icons/react'
 
 import type { Decision } from '@/api/types'
 import { humanize } from '@/lib/decision'
@@ -10,9 +10,10 @@ function Action({ action, quiet }: { action: string; quiet?: boolean }) {
 }
 
 /**
- * What the robot wanted and what it did: "Discard → Basket" when the server
- * changed the robot's mind, "~~Basket~~ → Discard" when a later check
- * corrected it, or one action when neither happened.
+ * What the robot wanted and what it did: "Discard → Basket" when the cloud
+ * decided against the robot's proposal, "~~Basket~~ ↷ Discard" when a later
+ * check corrected what the robot already did, or one action when neither
+ * happened. The two marks differ: one is a choice, the other an undo.
  */
 export function DecisionOutcome({
   decision,
@@ -27,7 +28,7 @@ export function DecisionOutcome({
     return (
       <span className={cn('inline-flex items-center gap-2', className)}>
         <span className="text-muted-foreground line-through decoration-muted-foreground/60">{humanize(action)}</span>
-        <ArrowRight className="size-4 text-muted-foreground" aria-label="corrected to" />
+        <ArrowUUpRight className="size-4 text-led-white" aria-label="corrected to" />
         <Action action={corrected} />
       </span>
     )
@@ -37,7 +38,7 @@ export function DecisionOutcome({
     return (
       <span className={cn('inline-flex items-center gap-2', className)}>
         {proposed ? <Action action={proposed} quiet /> : 'No proposal'}
-        <span className="text-muted-foreground">waiting for the server</span>
+        <span className="text-muted-foreground">asking the cloud</span>
       </span>
     )
   }
