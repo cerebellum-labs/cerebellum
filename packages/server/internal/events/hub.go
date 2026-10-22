@@ -53,6 +53,14 @@ func (h *Hub) Publish(msg []byte) {
 	}
 }
 
+// Listening reports whether anyone is subscribed, so a publisher can skip
+// building a message nobody would get.
+func (h *Hub) Listening() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.subs) > 0
+}
+
 // Close ends every subscription and refuses new ones. It is meant for
 // shutdown, when the connections behind the subscribers have to let go.
 func (h *Hub) Close() {

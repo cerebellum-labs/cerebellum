@@ -67,6 +67,29 @@ func (q *Queries) DeleteDevice(ctx context.Context, id uuid.UUID) (Device, error
 	return i, err
 }
 
+const getDevice = `-- name: GetDevice :one
+SELECT id, key, name, token_hash, metadata, agent_version, last_seen_at, created_at, deleted_at
+FROM devices
+WHERE id = $1
+`
+
+func (q *Queries) GetDevice(ctx context.Context, id uuid.UUID) (Device, error) {
+	row := q.db.QueryRow(ctx, getDevice, id)
+	var i Device
+	err := row.Scan(
+		&i.ID,
+		&i.Key,
+		&i.Name,
+		&i.TokenHash,
+		&i.Metadata,
+		&i.AgentVersion,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const getDeviceByTokenHash = `-- name: GetDeviceByTokenHash :one
 SELECT id, key, name
 FROM devices

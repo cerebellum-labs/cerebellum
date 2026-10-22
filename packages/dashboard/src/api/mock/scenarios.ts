@@ -38,6 +38,7 @@ function base(deviceId: UUID, at: number, item: Item, label: string, localConfid
     label: localConfidence == null ? label : `${label} ${localConfidence.toFixed(2)}`,
     decision: {
       id: newId(),
+      revision: 1,
       task: 'sort_item',
       options: ['basket', 'discard'],
       action_class: 'reversible',
@@ -69,6 +70,7 @@ function base(deviceId: UUID, at: number, item: Item, label: string, localConfid
       executed_at: null,
       cancelled_at: null,
       reviewed_at: null,
+      correction_applied_at: null,
     },
   }
 }
