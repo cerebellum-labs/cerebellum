@@ -10,11 +10,11 @@ export function DeviceSelect({ value, onChange }: { value?: string; onChange: (i
   const devices = useQuery({ queryKey: ['devices'], queryFn: () => api.listDevices() })
   return (
     <Select value={value ?? ALL} onValueChange={(v) => onChange(v === ALL ? null : v)}>
-      <SelectTrigger className="w-full sm:w-44" aria-label="Device">
+      <SelectTrigger className="w-full sm:w-44" aria-label="Robot">
         <SelectValue />
       </SelectTrigger>
       <SelectContent position="popper">
-        <SelectItem value={ALL}>All devices</SelectItem>
+        <SelectItem value={ALL}>All robots</SelectItem>
         {devices.data?.map((d) => (
           <SelectItem key={d.id} value={d.id}>
             {d.name}

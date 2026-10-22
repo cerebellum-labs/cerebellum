@@ -81,11 +81,11 @@ export function DevicesPage() {
     <section aria-labelledby="devices-title" className="grid gap-6">
       <PageHeader
         id="devices-title"
-        title="Devices"
-        description="Each robot syncs with its own token. Online means it synced in the last 15 seconds."
+        title="Robots"
+        description="The robots on the demo stand. Each one syncs with its own token; online means it synced in the last 15 seconds."
       >
         <Button onClick={() => admin.whenSignedIn(() => setAdding(true))}>
-          <Plus /> Add device
+          <Plus /> Add robot
         </Button>
       </PageHeader>
 
@@ -98,17 +98,17 @@ export function DevicesPage() {
       {devices.isPending ? (
         <DevicesSkeleton />
       ) : devices.isError ? (
-        <LoadError what="The devices" onRetry={() => devices.refetch()} className="panel p-6" />
+        <LoadError what="The robots" onRetry={() => devices.refetch()} className="panel p-6" />
       ) : devices.data.length === 0 ? (
         <div className="panel p-6 text-sm">
-          <p className="font-medium">No devices yet.</p>
+          <p className="font-medium">No robots yet.</p>
           <p className="mt-1 text-muted-foreground">Add one to get the token its agent signs requests with.</p>
         </div>
       ) : (
         <div className="panel overflow-clip">
           <div aria-hidden className={cn(COLUMNS, 'hidden h-9 border-b text-xs text-muted-foreground lg:grid')}>
             <span />
-            <span>Device</span>
+            <span>Robot</span>
             <span>Status</span>
             <span>Agent</span>
             <span>Added</span>
@@ -122,16 +122,16 @@ export function DevicesPage() {
                   <Link to={`/journal?device=${device.id}`} className="w-fit font-medium hover:underline">
                     {device.name}
                   </Link>
-                  <p className="flex min-w-0 flex-wrap gap-x-2 text-xs text-muted-foreground">
-                    <code className="readout break-all">{device.key}</code>
-                    {/* What the agent reports about the robot, values only:
-                        "Raspberry Pi 5 · usb-640x480". */}
-                    {Object.values(device.metadata).map((v, i) => (
-                      <span key={i} className="before:mr-2 before:content-['·']">
-                        {typeof v === 'string' ? v : JSON.stringify(v)}
-                      </span>
-                    ))}
-                  </p>
+                  <code className="readout text-xs break-all text-muted-foreground">{device.key}</code>
+                  {/* What the agent reports about the robot, values only:
+                      "usb-640x480 · Raspberry Pi 5". */}
+                  {Object.keys(device.metadata).length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {Object.values(device.metadata)
+                        .map((v) => (typeof v === 'string' ? v : JSON.stringify(v)))
+                        .join('\u00a0· ')}
+                    </p>
+                  )}
                 </div>
                 <p className={cn('max-lg:col-start-2', device.online ? 'text-foreground' : 'text-muted-foreground')}>
                   {device.online
@@ -203,7 +203,7 @@ export function DevicesPage() {
               variant={confirm?.kind === 'delete' ? 'destructive' : 'default'}
               onClick={() => confirm && run(confirm)}
             >
-              {confirm?.kind === 'rotate' ? 'Issue new token' : 'Delete device'}
+              {confirm?.kind === 'rotate' ? 'Issue new token' : 'Delete robot'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -275,7 +275,7 @@ function AddDeviceDialog({
       <DialogContent className="sm:max-w-md">
         <form onSubmit={submit} className="grid gap-4">
           <DialogHeader>
-            <DialogTitle>Add a device</DialogTitle>
+            <DialogTitle>Add a robot</DialogTitle>
             <DialogDescription>You get its token once, right after adding it.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
@@ -305,7 +305,7 @@ function AddDeviceDialog({
           </div>
           <DialogFooter>
             <Button type="submit" disabled={create.isPending || !key}>
-              {create.isPending ? 'Adding…' : 'Add device'}
+              {create.isPending ? 'Adding…' : 'Add robot'}
             </Button>
           </DialogFooter>
         </form>
@@ -370,7 +370,7 @@ function TokenDialog({ issued, onClose }: { issued: Issued | null; onClose: () =
 /** The device list's rows while it loads, in the same columns. */
 function DevicesSkeleton() {
   return (
-    <div className="panel overflow-clip" aria-busy aria-label="Loading the devices">
+    <div className="panel overflow-clip" aria-busy aria-label="Loading the robots">
       <div aria-hidden className={cn(COLUMNS, 'hidden h-9 border-b lg:grid')}>
         <span />
         <Skeleton className="h-3 w-12" />

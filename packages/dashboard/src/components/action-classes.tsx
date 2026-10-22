@@ -62,9 +62,9 @@ export function ActionClasses() {
     <section aria-labelledby="rules-title" className="grid gap-6">
       <div className="grid gap-1">
         <h2 id="rules-title" className="text-xl font-semibold tracking-tight">
-          The rules
+          Who decides what
         </h2>
-        <p className="text-sm text-muted-foreground">Every action of the robot belongs to one of three classes.</p>
+        <p className="text-sm text-muted-foreground">The costlier a mistake, the more the cloud decides.</p>
       </div>
 
       <div role="table" aria-labelledby="rules-title" className="panel overflow-hidden">

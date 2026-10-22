@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils'
 const NAV = [
   { to: '/', label: 'Overview', end: true },
   { to: '/journal', label: 'Journal', end: false },
-  { to: '/devices', label: 'Devices', end: false },
+  { to: '/robots', label: 'Robots', end: false },
 ]
 
 export function Layout() {
@@ -68,7 +68,7 @@ export function Layout() {
             {devices.isPending && <Skeleton aria-hidden className="hidden h-4 w-20 md:block" />}
             {devices.data && (
               <Link
-                to="/devices"
+                to="/robots"
                 className="hidden items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground md:flex"
               >
                 <Led color={online ? 'green' : 'off'} />
@@ -138,9 +138,13 @@ function HackathonBanner() {
       <div className="mx-auto flex min-h-11 max-w-[1600px] items-center gap-3 px-4 py-2 text-sm sm:px-6">
         <Trophy weight="fill" className="size-4 shrink-0" aria-hidden />
         <p className="min-w-0 flex-1">
-          <span className="font-semibold">Hackathon demo</span>
-          <span className="hidden sm:inline">, Physical AI track</span>
-          <span className="hidden md:inline">. Nemotron on Nebius Token Factory.</span>
+          {/* Says what the visitor is looking at: the product itself, wired
+              to a test stand, not a mock-up. */}
+          <span className="font-semibold">Live demo</span>
+          <span className="hidden sm:inline">
+            : the real Cerebellum dashboard, {simulator ? 'running a simulated robot' : 'connected to a test robot'}
+          </span>
+          <span className="hidden xl:inline"> · Nebius × NVIDIA Global AI Hackathon</span>
         </p>
         <a
           href="https://github.com/cerebellum-labs/cerebellum"

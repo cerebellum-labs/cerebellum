@@ -48,7 +48,7 @@ const isShow = (value: string | null): value is Show => value != null && value i
 // adds confidence and cost.
 const COLUMNS = cn(
   'grid items-center gap-x-3 px-3 sm:px-4',
-  'grid-cols-[10px_80px_minmax(0,1fr)]',
+  'grid-cols-[10px_64px_minmax(0,1fr)] @sm:grid-cols-[10px_80px_minmax(0,1fr)]',
   '@2xl:grid-cols-[10px_72px_64px_minmax(0,1fr)_minmax(0,11rem)_5rem] @2xl:gap-x-4',
   '@4xl:grid-cols-[10px_72px_72px_minmax(0,1fr)_minmax(0,12rem)_4rem_5rem_5.5rem]',
 )
@@ -138,7 +138,7 @@ export function JournalPage() {
       </Notice>
     ) : (
       <Notice title="No decisions yet.">
-        <p>Start the agent on a device: its decisions appear here as soon as it reports one.</p>
+        <p>Start the agent on a robot: its decisions appear here as soon as it reports one.</p>
       </Notice>
     )
   } else {
@@ -204,8 +204,8 @@ export function JournalPage() {
     <div className="grid gap-6">
       <PageHeader
         id="journal-title"
-        title="Journal"
-        description="Every decision with its frame, who made it and how long it took."
+        title="Decision journal"
+        description="Every decision the test robots made: what the camera saw, who decided and how long it took."
       >
         <DeviceSelect value={deviceId} onChange={(id) => setParam('device', id)} />
         <Select value={show ?? ALL} onValueChange={(v) => setParam('show', v === ALL ? null : v)}>
@@ -345,12 +345,15 @@ function DecisionRow({
           {/* Done is most decisions: only a status that says something more
               is written out. Narrow, the time and how long it took join it. */}
           <span className="flex min-w-0 gap-x-3 truncate text-xs text-muted-foreground">
-            <span className="readout @2xl:hidden">{clockTime(d.decided_at)}</span>
+            <span className="readout shrink-0 @2xl:hidden">{clockTime(d.decided_at)}</span>
+            {d.latency_ms != null && <span className="readout shrink-0 @2xl:hidden">{duration(d.latency_ms)}</span>}
             {d.status !== 'executed' && (
-              <span className={cn(d.status === 'waiting_for_server' && 'text-led-amber')}>{STATUS_LABEL[d.status]}</span>
+              <span className={cn('truncate', d.status === 'waiting_for_server' && 'text-led-amber')}>
+                {STATUS_LABEL[d.status]}
+              </span>
             )}
-            {showDevice && <span className="truncate">{d.device_name}</span>}
-            {d.latency_ms != null && <span className="readout @2xl:hidden">{duration(d.latency_ms)}</span>}
+            {/* Too narrow for both: the device gives way, the filter has it. */}
+            {showDevice && <span className="hidden truncate @sm:inline">{d.device_name}</span>}
           </span>
         </span>
         <span className="hidden min-w-0 items-start gap-2 @2xl:flex">
