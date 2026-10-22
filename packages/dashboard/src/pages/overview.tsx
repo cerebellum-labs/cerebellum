@@ -1,20 +1,24 @@
-import { ArrowRight } from '@phosphor-icons/react'
+import { ArrowRight, Cloud, Cpu, WifiSlash } from '@phosphor-icons/react'
 import { useQuery } from '@tanstack/react-query'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 
 import { api } from '@/api/client'
+import type { Decision } from '@/api/types'
 import { ActionClasses } from '@/components/action-classes'
 import { DecisionOutcome } from '@/components/decision-outcome'
-import { Trace } from '@/components/decision-trace'
+import { Trace, TraceSkeleton } from '@/components/decision-trace'
 import { Frame } from '@/components/frame'
 import { Led } from '@/components/led'
+import { LoadError } from '@/components/load-error'
 import { SystemMap } from '@/components/system-map'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useFigures } from '@/hooks/use-figures'
 import { useNow } from '@/hooks/use-now'
 import { useRecentDecisions } from '@/hooks/use-recent-decisions'
-import { ledOf, STATUS_LABEL } from '@/lib/decision'
+import { CLOUD_PROVIDER, LIGHT, ledOf, STATUS_LABEL } from '@/lib/decision'
 import { count, percent, timeAgo } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 /**
  * The front page: what Cerebellum is, a real decision as it happens, the
@@ -22,15 +26,13 @@ import { count, percent, timeAgo } from '@/lib/format'
  */
 export function OverviewPage() {
   return (
-    <div className="grid gap-16 sm:gap-20">
-      <header className="grid items-start gap-10 pt-2 sm:pt-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-12 xl:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] xl:gap-16">
-        <div className="grid content-start gap-6 lg:pt-6">
-          <h1 className="max-w-[18ch] text-4xl leading-[1.05] font-semibold tracking-tighter text-balance sm:text-5xl xl:text-6xl">
+    <div className="grid gap-14 sm:gap-16">
+      <header className="grid items-start gap-10 pt-2 sm:pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-12 xl:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] xl:gap-16">
+        <div className="grid max-w-[36rem] content-start gap-7 lg:pt-4">
+          <h1 className="max-w-[20ch] text-3xl leading-[1.08] font-semibold tracking-tighter text-balance sm:text-4xl xl:text-5xl">
             Robots that decide on their own and ask the cloud when it matters
           </h1>
-          <p className="max-w-[52ch] text-lg leading-relaxed text-pretty text-muted-foreground">
-            Cerebellum syncs a robot's local model with a cloud model, and keeps the robot working offline.
-          </p>
+          <HowItWorks />
           <Figures />
           <Link
             to="/journal"
@@ -48,17 +50,52 @@ export function OverviewPage() {
   )
 }
 
-/** What it gains over asking the cloud every time, said in one sentence. */
+// What Cerebellum is, in three lines, with the icons the live system uses
+// for the same parts.
+const HOW: { icon: ReactNode; title: string; text: string }[] = [
+  { icon: <Cpu />, title: 'Decides on the robot', text: 'in milliseconds, next to the camera' },
+  { icon: <Cloud />, title: `Asks the cloud model on ${CLOUD_PROVIDER}`, text: "when an action can't be undone" },
+  { icon: <WifiSlash />, title: 'Keeps working offline', text: 'and syncs once the network is back' },
+]
+
+function HowItWorks() {
+  return (
+    <ul aria-label="How it works" className="grid gap-2.5">
+      {HOW.map((step) => (
+        <li key={step.title} className="flex items-baseline gap-3 text-base">
+          <span aria-hidden className="translate-y-0.5 text-brand [&>svg]:size-4">
+            {step.icon}
+          </span>
+          <span>
+            <span className="font-medium">{step.title}</span>{' '}
+            <span className="text-muted-foreground">{step.text}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** What it gains over asking the cloud every time, in one line. */
 function Figures() {
+  const recent = useRecentDecisions()
   const f = useFigures()
-  if (f === undefined) return <Skeleton className="h-12 w-full max-w-[52ch]" />
+  // The latest decision next to it says what failed.
+  if (recent.isError) return null
+  if (f === undefined) {
+    return (
+      <div className="grid gap-2 py-1" aria-busy aria-label="Loading the figures">
+        <Skeleton className="h-3.5 w-full" />
+        <Skeleton className="h-3.5 w-1/3" />
+      </div>
+    )
+  }
   if (f === null) return null
   const n = (value: string) => <span className="readout font-medium text-foreground">{value}</span>
   return (
-    <p className="max-w-[52ch] text-base leading-relaxed text-pretty text-muted-foreground">
-      Over the last {n(count(f.decided))} decisions it answered {n(`${f.faster.toFixed(1)}×`)} faster and spent{' '}
-      {n(percent(f.saved))} less than asking the cloud every time, and caught {n(count(f.mistakes))} of the robot's
-      mistakes.
+    <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
+      Last {n(count(f.decided))} decisions: {n(`${f.faster.toFixed(1)}×`)} faster and {n(percent(f.saved))} cheaper than
+      asking the cloud every time.
     </p>
   )
 }
@@ -74,7 +111,10 @@ function LatestDecision() {
     enabled: Boolean(latest),
   })
 
-  if (recent.isPending) return <Skeleton className="h-[34rem] w-full rounded-lg" />
+  if (recent.isPending) return <LatestDecisionSkeleton />
+  if (recent.isError) {
+    return <LoadError what="The latest decision" onRetry={() => recent.refetch()} className="panel p-5" />
+  }
   if (!latest) {
     return (
       <section className="panel grid gap-1 p-5 text-sm">
@@ -94,22 +134,99 @@ function LatestDecision() {
           {latest.device_name}, {timeAgo(latest.decided_at, now)}
         </p>
       </div>
-      <div key={latest.id} className="grid animate-in gap-5 p-4 duration-300 fade-in-0">
-        <Link to={`/journal?decision=${latest.id}`} aria-label="Open this decision in the journal">
-          <Frame id={latest.id} hasFrame={latest.has_frame} viewfinder className="w-full" />
-        </Link>
-        <div className="grid gap-1">
-          <p className="flex items-center gap-2.5 text-xl font-semibold tracking-tight">
-            <Led color={ledOf(latest)} className="size-3" />
-            <DecisionOutcome decision={latest} />
-          </p>
-          <p className="text-sm text-muted-foreground">{STATUS_LABEL[latest.status]}</p>
+      {/* The frame sets the top row's height and the path gets a fixed one,
+          so the panel keeps its size from one decision to the next and the
+          live system below stays put. A longer path fades out at the
+          bottom; the journal has all of it. */}
+      <div key={latest.id} className="grid animate-in gap-4 p-4 duration-300 fade-in-0">
+        <div className="grid grid-cols-[10.5rem_minmax(0,1fr)] items-center gap-4">
+          <Link to={`/journal?decision=${latest.id}`} aria-label="Open this decision in the journal">
+            <Frame id={latest.id} hasFrame={latest.has_frame} className="w-full" />
+          </Link>
+          <div className="grid min-w-0 gap-1">
+            <p className="flex items-start gap-2 text-lg leading-snug font-semibold tracking-tight">
+              <Led color={ledOf(latest)} className="mt-2" />
+              <DecisionOutcome decision={latest} className="flex-wrap gap-x-2 gap-y-0" />
+            </p>
+            <p className="pl-[18px] text-sm text-muted-foreground">{subtitleOf(latest)}</p>
+          </div>
         </div>
-        {detail.data ? (
-          <Trace decision={detail.data.decision} corrections={detail.data.corrections} />
-        ) : (
-          <Skeleton className="h-28 w-full" />
-        )}
+        <PathBox>
+          {detail.data ? (
+            <Trace decision={detail.data.decision} corrections={detail.data.corrections} brief />
+          ) : detail.isError ? (
+            <LoadError compact what="How it was decided" onRetry={() => detail.refetch()} />
+          ) : (
+            <TraceSkeleton />
+          )}
+        </PathBox>
+      </div>
+      <Link
+        to={`/journal?decision=${latest.id}`}
+        className="flex h-11 items-center justify-between border-t px-4 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        The whole story in the journal
+        <ArrowRight className="size-4" aria-hidden />
+      </Link>
+    </section>
+  )
+}
+
+/**
+ * The path's fixed-height slot. Room for a cloud decision's path; a longer
+ * one, like a correction's, fades out at the bottom, and only then.
+ */
+function PathBox({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [overflows, setOverflows] = useState(false)
+  useEffect(() => {
+    const box = ref.current
+    const content = box?.firstElementChild
+    if (!box || !content) return
+    const check = () => setOverflows(box.scrollHeight > box.clientHeight + 1)
+    const observer = new ResizeObserver(check)
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [children])
+  return (
+    <div ref={ref} className={cn('h-36 overflow-hidden', overflows && 'mask-b-from-75%')}>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * The line under the outcome. Where the outcome already says "asking the
+ * cloud" or "cancelled", it says what the robot's light showed instead.
+ */
+function subtitleOf(d: Pick<Decision, 'status'>): string {
+  if (d.status === 'waiting_for_server') return `${LIGHT.amber.lit}: not sure`
+  if (d.status === 'cancelled') return `${LIGHT.off.lit}: gave up waiting`
+  return STATUS_LABEL[d.status]
+}
+
+/** The latest decision's panel while it loads, in the same places. */
+function LatestDecisionSkeleton() {
+  return (
+    <section className="panel overflow-hidden" aria-busy aria-label="Loading the latest decision">
+      <div className="flex h-12 items-center justify-between gap-3 border-b px-4">
+        <Skeleton className="h-3.5 w-28" />
+        <Skeleton className="h-3.5 w-32" />
+      </div>
+      <div className="grid gap-4 p-4">
+        <div className="grid grid-cols-[10.5rem_minmax(0,1fr)] items-center gap-4">
+          <Skeleton className="aspect-[4/3] w-full" />
+          <div className="grid gap-2">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-3.5 w-24" />
+          </div>
+        </div>
+        <div className="h-36">
+          <TraceSkeleton />
+        </div>
+      </div>
+      <div className="flex h-11 items-center border-t px-4">
+        <Skeleton className="h-3.5 w-48" />
       </div>
     </section>
   )

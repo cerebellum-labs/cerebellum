@@ -13,7 +13,10 @@ const FILL: Record<LedColor, string> = {
   off: 'bg-led-off',
 }
 
-/** One of the sorter's LEDs. Decorative: the status is always written next to it. */
+/**
+ * One of the sorter's LEDs. Decorative: the status is always written next to
+ * it. `title` names the light on hover where the legend isn't in sight.
+ */
 export function Led({ color, className, ...props }: { color: LedColor } & ComponentProps<'span'>) {
   return <span aria-hidden className={cn('inline-block size-2.5 shrink-0 rounded-full', FILL[color], className)} {...props} />
 }

@@ -15,13 +15,15 @@ import { Link } from 'react-router'
 import { api, simulator } from '@/api/client'
 import type { DashboardEvent } from '@/api/types'
 import { Led } from '@/components/led'
+import { LoadError } from '@/components/load-error'
 import { Mark } from '@/components/mark'
 import { Readout } from '@/components/readout'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useNow } from '@/hooks/use-now'
 import { useRecentDecisions } from '@/hooks/use-recent-decisions'
 import { useRobot } from '@/hooks/use-robot'
-import { ledOf, modelName, type LedColor } from '@/lib/decision'
+import { CLOUD_PROVIDER, ledOf, modelName, type LedColor } from '@/lib/decision'
 import { count, duration, percent, timeAgo, usd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -41,8 +43,6 @@ type Hop = Omit<Comet, 'key'>
 
 /** Time between one wire and the next for the same decision. */
 const HOP_MS = 650
-/** How long the "back online" note stays after a sync. */
-const SYNCED_NOTE_MS = 7_000
 
 const COLOR: Record<LedColor, string> = {
   green: 'var(--led-green)',
@@ -109,7 +109,8 @@ export function SystemMap() {
   const recent = useRecentDecisions()
 
   const [comets, setComets] = useState<Comet[]>([])
-  const [synced, setSynced] = useState<{ count: number; at: number } | null>(null)
+  // The last sync after the network came back; it stays until the next cut.
+  const [synced, setSynced] = useState<number | null>(null)
   const nextKey = useRef(0)
 
   useEffect(() => {
@@ -119,7 +120,7 @@ export function SystemMap() {
     const offServer = api.subscribe((event) => add(hopsOf(event, seen, Boolean(simulator))))
     const offRobot = simulator?.subscribe((event) => {
       if (event.type === 'decided') add([{ wire: 'local', back: false, light: event.light, delay: 0 }])
-      if (event.type === 'synced' && event.count > 0) setSynced({ count: event.count, at: Date.now() })
+      if (event.type === 'synced' && event.count > 0) setSynced(event.count)
     })
     return () => {
       offServer()
@@ -142,11 +143,36 @@ export function SystemMap() {
   const localModel = rows.find((d) => d.local_model)?.local_model
   const cloudModel = rows.find((d) => d.source === 'server')?.model
   const waiting = s?.by_status.waiting_for_server ?? 0
-  const showSynced = synced && robot.online && now - synced.at < SYNCED_NOTE_MS
-  const none = <span className="text-faint">–</span>
+  const showSynced = synced !== null && robot.online
+  // A figure still on its way holds its place instead of reading as zero; one
+  // the server doesn't know (no answers yet, an agent that doesn't report
+  // it) leaves its readout out rather than showing a dash.
+  const loading = <Skeleton className="h-5 w-12" />
+  const reading = (pending: boolean, label: string, value: ReactNode | null) =>
+    pending ? (
+      <Readout label={label}>{loading}</Readout>
+    ) : value == null ? null : (
+      <Readout label={label}>{value}</Readout>
+    )
+  const ofStats = (label: string, value: ReactNode | null) => reading(stats.isPending, label, value)
+  const ofDevices = (label: string, value: ReactNode | null) => reading(devices.isPending, label, value)
+  const failed = stats.isError || devices.isError
+  const retry = () => {
+    if (stats.isError) void stats.refetch()
+    if (devices.isError) void devices.refetch()
+  }
 
-  let status: ReactNode
-  if (devices.data && total === 0) {
+  // Null when all is well: the header and the agent already say how many
+  // robots are online, so the note only shows for news.
+  let status: ReactNode = null
+  // What a screen reader hears: the same news without the ticking clock and
+  // counters, so it speaks once per change instead of every second.
+  let announce = ''
+  if (devices.isPending) {
+    // Nothing yet: the readouts below hold their places.
+  } else if (failed) {
+    status = <LoadError compact what="The system's state" onRetry={retry} />
+  } else if (devices.data && total === 0) {
     status = (
       <>
         <span className="font-medium">No robots yet.</span>{' '}
@@ -159,6 +185,7 @@ export function SystemMap() {
       </>
     )
   } else if (!robot.online) {
+    announce = 'Offline. The robots keep deciding on their own.'
     status = (
       <>
         <span className="font-medium">
@@ -176,25 +203,21 @@ export function SystemMap() {
       </>
     )
   } else if (showSynced) {
+    const syncedNote = `${count(synced)} offline ${synced === 1 ? 'decision' : 'decisions'} synced.`
+    announce = `Back online. ${syncedNote}`
     status = (
       <>
         <span className="font-medium">Back online.</span>{' '}
         <span className="text-muted-foreground">
-          {count(synced.count)} offline {synced.count === 1 ? 'decision' : 'decisions'} synced.
+          {syncedNote}{' '}
+          <Link to="/journal" className="underline underline-offset-4 hover:text-foreground">
+            See them in the journal
+          </Link>
         </span>
       </>
     )
   } else {
-    status = (
-      <>
-        <span className="font-medium">
-          {online} of {total} {total === 1 ? 'robot' : 'robots'} online.
-        </span>{' '}
-        <span className="text-muted-foreground">
-          {robot.simulated ? 'Cut the network to see what happens offline.' : 'Syncing every few seconds.'}
-        </span>
-      </>
-    )
+    announce = `${online} of ${total} ${total === 1 ? 'robot' : 'robots'} online.`
   }
 
   return (
@@ -219,16 +242,20 @@ export function SystemMap() {
           )}
         </div>
 
-        <p
-          aria-live="polite"
-          className={cn(
-            'flex items-start gap-2.5 rounded-md border px-3 py-2.5 text-sm',
-            robot.online || total === 0 ? 'border-border bg-card' : 'border-led-amber/30 bg-led-amber/[0.06]',
-          )}
-        >
-          <Led color={total === 0 ? 'off' : robot.online ? 'green' : 'amber'} className="mt-1.5" />
-          <span className="min-w-0">{status}</span>
+        <p role="status" aria-live="polite" className="sr-only">
+          {announce}
         </p>
+        {status && (
+          <div
+            className={cn(
+              'flex items-start gap-2.5 rounded-md border px-3 py-2.5 text-sm',
+              robot.online || total === 0 ? 'border-border bg-card' : 'border-led-amber/30 bg-led-amber/[0.06]',
+            )}
+          >
+            <Led color={failed || total === 0 ? 'off' : robot.online ? 'green' : 'amber'} className="mt-1.5" />
+            <div className="min-w-0">{status}</div>
+          </div>
+        )}
 
         {/* One grid on wide screens: the robot on the left, running down from
             the camera to the agent; the cloud on the right, running up from
@@ -246,10 +273,8 @@ export function SystemMap() {
               title="Camera and local model"
               subtitle={localModel ?? 'Local model'}
             >
-              <Readout label="Answers in">
-                {s?.avg_latency_ms.device != null ? duration(s.avg_latency_ms.device) : none}
-              </Readout>
-              <Readout label="Decides alone">{decided && s ? percent(s.by_source.device / decided) : none}</Readout>
+              {ofStats('Answers in', s?.avg_latency_ms.device != null ? duration(s.avg_latency_ms.device) : null)}
+              {ofStats('Decides alone', decided && s ? percent(s.by_source.device / decided) : null)}
             </Node>
             <Wire className="lg:col-start-1 lg:row-start-3" label="Task and frame" comets={on('local')} onDone={drop} />
             <Node
@@ -261,10 +286,8 @@ export function SystemMap() {
               light={robot.queued ? 'amber' : undefined}
               lightLabel={robot.queued ? `${count(robot.queued)} queued` : undefined}
             >
-              <Readout label="Online">
-                {online}/{total}
-              </Readout>
-              <Readout label="Last sync">{lastSeen ? timeAgo(lastSeen, now) : none}</Readout>
+              {ofDevices('Online', devices.data ? `${online}/${total}` : null)}
+              {ofDevices('Last sync', lastSeen ? timeAgo(lastSeen, now) : null)}
             </Node>
             <ZoneNote className="lg:col-start-1">
               <LockSimple className="mt-px size-4 shrink-0" aria-hidden />
@@ -290,8 +313,8 @@ export function SystemMap() {
               subtitle="Journal of every robot"
               brand
             >
-              <Readout label="Decisions">{s ? count(s.total) : none}</Readout>
-              <Readout label="Corrections">{s ? count(s.corrections) : none}</Readout>
+              {ofStats('Decisions', s ? count(s.total) : null)}
+              {ofStats('Corrections', s ? count(s.corrections) : null)}
             </Node>
             <Wire
               flip
@@ -304,18 +327,16 @@ export function SystemMap() {
               className="lg:col-start-3 lg:row-start-2"
               icon={<Brain className="size-4" />}
               title="Cloud model"
-              subtitle={cloudModel ? modelName(cloudModel) : 'Vision language model'}
+              subtitle={`${cloudModel ? modelName(cloudModel) : 'Vision language model'} on ${CLOUD_PROVIDER}`}
               light={waiting ? 'amber' : undefined}
               lightLabel={waiting ? `${waiting} thinking` : undefined}
             >
-              <Readout label="Answers in">
-                {s?.avg_latency_ms.server != null ? duration(s.avg_latency_ms.server) : none}
-              </Readout>
-              <Readout label="Spent">{s ? usd(s.cost_usd) : none}</Readout>
+              {ofStats('Answers in', s?.avg_latency_ms.server != null ? duration(s.avg_latency_ms.server) : null)}
+              {ofStats('Spent', s ? usd(s.cost_usd) : null)}
             </Node>
             <ZoneNote className="lg:col-start-3">
               <Cloud className="mt-px size-4 shrink-0" aria-hidden />
-              <span>Runs in your own cloud.</span>
+              <span>Served by {CLOUD_PROVIDER} Token Factory.</span>
             </ZoneNote>
           </Zone>
         </div>

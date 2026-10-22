@@ -4,12 +4,14 @@ import type { ReactNode } from 'react'
 
 import { api, ApiError } from '@/api/client'
 import { DecisionOutcome } from '@/components/decision-outcome'
-import { Trace } from '@/components/decision-trace'
+import { Trace, TraceSkeleton } from '@/components/decision-trace'
 import { Frame } from '@/components/frame'
 import { Led } from '@/components/led'
+import { StatusLine } from '@/components/light-legend'
+import { LoadError } from '@/components/load-error'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { CLASS_LABEL, humanize, ledOf, STATUS_LABEL } from '@/lib/decision'
+import { CLASS_LABEL, humanize, ledOf } from '@/lib/decision'
 import { clockTime, count, fullTime, usd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -25,20 +27,30 @@ export function DecisionPanel({ id, bare, onClose }: { id: string; bare?: boolea
 
   if (query.isPending) {
     return (
-      <div className={cn(box, 'grid gap-4 p-4')} aria-busy aria-label="Loading the decision">
+      <div className={cn(box, 'grid gap-5 p-4')} aria-busy aria-label="Loading the decision">
         <Skeleton className="aspect-[4/3] w-full" />
-        <Skeleton className="h-5 w-48" />
-        <Skeleton className="h-40 w-full" />
+        <div className="grid gap-2">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-3.5 w-28" />
+        </div>
+        <TraceSkeleton />
+        <div className="grid gap-3 border-t pt-4">
+          {['w-24', 'w-40', 'w-28', 'w-36'].map((width) => (
+            <div key={width} className="flex justify-between gap-4">
+              <Skeleton className="h-3.5 w-20" />
+              <Skeleton className={cn('h-3.5', width)} />
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
   if (query.isError) {
     const missing = query.error instanceof ApiError && query.error.status === 404
-    return (
-      <div className={cn(box, 'grid gap-1 p-4 text-sm')}>
-        <p className="font-medium">{missing ? 'This decision no longer exists.' : "The decision didn't load."}</p>
-        {!missing && <p className="text-muted-foreground">Check that the server is reachable, then try again.</p>}
-      </div>
+    return missing ? (
+      <div className={cn(box, 'p-4 text-sm font-medium')}>This decision no longer exists.</div>
+    ) : (
+      <LoadError what="The decision" onRetry={() => query.refetch()} className={cn(box, 'p-4')} />
     )
   }
 
@@ -65,7 +77,7 @@ export function DecisionPanel({ id, bare, onClose }: { id: string; bare?: boolea
             <Led color={ledOf(d)} className="size-3" />
             <DecisionOutcome decision={d} />
           </h2>
-          <p className="text-sm text-muted-foreground">{STATUS_LABEL[d.status]}</p>
+          <StatusLine decision={d} />
         </header>
 
         <Section title="How it was decided" fields={false}>

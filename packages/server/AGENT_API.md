@@ -94,6 +94,7 @@ The agent always sends a decision whole. The server keeps the parts the agent ow
 | `metadata` | object | optional | The team's own context: raw detector output, bounding box, servo angle. Shown in the dashboard and given to the model |
 | `local_model` | string | optional | Like `yolox-nano` |
 | `local_confidence` | number | optional | 0 to 1 |
+| `local_latency_ms` | integer | optional | How long the local model took, 0 or more. The dashboard shows it as the robot's answer time |
 | `needs_review` | boolean | optional | Only for `reversible` with a `prompt`: the server asks the cloud model later |
 | `decided_at` | time | required | The robot's clock |
 | `action` | string | see rules | The device's decision, one of the options. Required for `reflex` and `reversible`; for `irreversible` the server decides and ignores it |
@@ -118,7 +119,8 @@ The agent's fields come back as stored, plus what the server knows:
 | `model` | string or null | The model behind `action`: the local one, or the cloud one for a server decision |
 | `confidence` | number or null | That model's confidence, 0 to 1 |
 | `reason` | string or null | The cloud model's explanation of a server decision |
-| `latency_ms`, `input_tokens`, `output_tokens` | integer or null | The cloud call of a server decision |
+| `latency_ms` | integer or null | How long that model took: `local_latency_ms` for a device decision, the cloud call for a server one |
+| `input_tokens`, `output_tokens` | integer or null | The cloud call of a server decision |
 | `cost_usd` | number or null | Its cost |
 | `answered_at` | time or null | When the cloud model answered |
 | `received_at` | time | When the server first got the decision, by its clock |
@@ -149,6 +151,7 @@ Asks the cloud model for irreversible decisions, the ones only the server may ma
       "metadata": {"detector": {"label": "cup", "confidence": 0.88}, "bbox": [120, 80, 260, 210]},
       "local_model": "yolox-nano",
       "local_confidence": 0.88,
+      "local_latency_ms": 34,
       "decided_at": "2026-10-21T18:09:00.123Z"
     },
     "frame": "/9j/4AAQSkZJRgABAQ..."

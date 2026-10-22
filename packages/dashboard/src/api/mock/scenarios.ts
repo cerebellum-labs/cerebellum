@@ -59,6 +59,8 @@ function base(deviceId: UUID, at: number, item: Item, label: string, localConfid
       prompt: SORT_PROMPT,
       local_model: LOCAL_MODEL,
       local_confidence: localConfidence,
+      // A detector on a Raspberry Pi answers in tens of milliseconds.
+      local_latency_ms: localConfidence == null ? null : jitter(36, 8),
       latency_ms: null,
       cost_usd: null,
       input_tokens: null,
@@ -98,6 +100,7 @@ function onDevice(d: Decision, action: string, at: number) {
   d.model = LOCAL_MODEL
   d.action = action
   d.confidence = d.local_confidence
+  d.latency_ms = d.local_latency_ms
   d.executed_at = iso(at + 400)
 }
 

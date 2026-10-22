@@ -25,7 +25,10 @@ SELECT count(*) AS total,
        count(*) FILTER (WHERE action_class = 'reflex')       AS class_reflex,
        count(*) FILTER (WHERE action_class = 'reversible')   AS class_reversible,
        count(*) FILTER (WHERE action_class = 'irreversible') AS class_irreversible,
-       count(*) FILTER (WHERE corrected_action IS NOT NULL)  AS corrections
+       count(*) FILTER (WHERE corrected_action IS NOT NULL)  AS corrections,
+       -- The average means nothing while device_latencies is 0.
+       count(local_latency_ms) FILTER (WHERE source = 'device') AS device_latencies,
+       coalesce(avg(local_latency_ms) FILTER (WHERE source = 'device'), 0)::float8 AS avg_device_latency_ms
 FROM decisions
 WHERE $1::uuid IS NULL OR device_id = $1::uuid
 `
@@ -44,6 +47,8 @@ type DecisionStatsRow struct {
 	ClassReversible        int64
 	ClassIrreversible      int64
 	Corrections            int64
+	DeviceLatencies        int64
+	AvgDeviceLatencyMs     float64
 }
 
 // DecisionStats counts decisions, all or one device's, in one pass.
@@ -64,12 +69,14 @@ func (q *Queries) DecisionStats(ctx context.Context, deviceID *uuid.UUID) (Decis
 		&i.ClassReversible,
 		&i.ClassIrreversible,
 		&i.Corrections,
+		&i.DeviceLatencies,
+		&i.AvgDeviceLatencyMs,
 	)
 	return i, err
 }
 
 const getDecision = `-- name: GetDecision :one
-SELECT d.id, d.device_id, d.revision, d.task, d.options, d.action_class, d.proposed_action, d.prompt, d.metadata, d.local_model, d.local_confidence, d.needs_review, d.decided_at, d.received_at, d.action, d.model_call_id, d.executed_at, d.cancelled_at, d.cancel_reason, d.reviewed_at, d.review_call_id, d.corrected_action, d.correction_applied_at, d.source, d.status,
+SELECT d.id, d.device_id, d.revision, d.task, d.options, d.action_class, d.proposed_action, d.prompt, d.metadata, d.local_model, d.local_confidence, d.needs_review, d.decided_at, d.received_at, d.action, d.model_call_id, d.executed_at, d.cancelled_at, d.cancel_reason, d.reviewed_at, d.review_call_id, d.corrected_action, d.correction_applied_at, d.source, d.status, d.local_latency_ms,
        dev.key   AS device_key,
        dev.name  AS device_name,
        EXISTS (SELECT 1 FROM frames f WHERE f.decision_id = d.id) AS has_frame,
@@ -136,6 +143,7 @@ func (q *Queries) GetDecision(ctx context.Context, id uuid.UUID) (GetDecisionRow
 		&i.Decision.CorrectionAppliedAt,
 		&i.Decision.Source,
 		&i.Decision.Status,
+		&i.Decision.LocalLatencyMs,
 		&i.DeviceKey,
 		&i.DeviceName,
 		&i.HasFrame,
@@ -167,7 +175,7 @@ func (q *Queries) GetFrame(ctx context.Context, decisionID uuid.UUID) ([]byte, e
 }
 
 const listDecisions = `-- name: ListDecisions :many
-SELECT d.id, d.device_id, d.revision, d.task, d.options, d.action_class, d.proposed_action, d.prompt, d.metadata, d.local_model, d.local_confidence, d.needs_review, d.decided_at, d.received_at, d.action, d.model_call_id, d.executed_at, d.cancelled_at, d.cancel_reason, d.reviewed_at, d.review_call_id, d.corrected_action, d.correction_applied_at, d.source, d.status,
+SELECT d.id, d.device_id, d.revision, d.task, d.options, d.action_class, d.proposed_action, d.prompt, d.metadata, d.local_model, d.local_confidence, d.needs_review, d.decided_at, d.received_at, d.action, d.model_call_id, d.executed_at, d.cancelled_at, d.cancel_reason, d.reviewed_at, d.review_call_id, d.corrected_action, d.correction_applied_at, d.source, d.status, d.local_latency_ms,
        dev.key   AS device_key,
        dev.name  AS device_name,
        EXISTS (SELECT 1 FROM frames f WHERE f.decision_id = d.id) AS has_frame,
@@ -187,14 +195,20 @@ LEFT JOIN model_calls mc ON mc.id = d.model_call_id
 LEFT JOIN model_calls rc ON rc.id = d.review_call_id
 WHERE ($1::uuid IS NULL OR d.device_id = $1::uuid)
   AND ($2::text IS NULL OR d.status = $2::text)
-  AND ($3::uuid IS NULL OR d.id < $3::uuid)
+  AND ($3::text IS NULL OR d.source = $3::text)
+  AND (NOT $4::boolean
+       OR d.corrected_action IS NOT NULL
+       OR (d.source = 'server' AND d.proposed_action IS NOT NULL AND d.proposed_action <> d.action))
+  AND ($5::uuid IS NULL OR d.id < $5::uuid)
 ORDER BY d.id DESC
-LIMIT $4
+LIMIT $6
 `
 
 type ListDecisionsParams struct {
 	DeviceID *uuid.UUID
 	Status   *string
+	Source   *string
+	Changed  bool
 	Before   *uuid.UUID
 	RowLimit int32
 }
@@ -217,13 +231,17 @@ type ListDecisionsRow struct {
 }
 
 // ListDecisions pages through the journal, newest first: the next page
-// starts before the last id of this one. Every filter is optional.
+// starts before the last id of this one. Every filter is optional:
+// changed keeps the decisions where the cloud disagreed with the robot,
+// by overruling its proposal or by correcting it afterwards.
 // GetDecision selects the same columns, so their rows convert into each
 // other: keep the two in step.
 func (q *Queries) ListDecisions(ctx context.Context, arg ListDecisionsParams) ([]ListDecisionsRow, error) {
 	rows, err := q.db.Query(ctx, listDecisions,
 		arg.DeviceID,
 		arg.Status,
+		arg.Source,
+		arg.Changed,
 		arg.Before,
 		arg.RowLimit,
 	)
@@ -260,6 +278,7 @@ func (q *Queries) ListDecisions(ctx context.Context, arg ListDecisionsParams) ([
 			&i.Decision.CorrectionAppliedAt,
 			&i.Decision.Source,
 			&i.Decision.Status,
+			&i.Decision.LocalLatencyMs,
 			&i.DeviceKey,
 			&i.DeviceName,
 			&i.HasFrame,

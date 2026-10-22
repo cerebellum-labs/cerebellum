@@ -19,6 +19,8 @@ const (
 	maxPageSize     = 200
 )
 
+var sources = map[string]bool{"device": true, "server": true}
+
 var statuses = map[string]bool{
 	"decided_on_device":  true,
 	"waiting_for_server": true,
@@ -35,8 +37,9 @@ type decisionPage struct {
 }
 
 // listDecisions serves a page of the journal, newest first. Query:
-// device_id, status, before (the next_before of the previous page) and
-// limit, all optional.
+// device_id, status, source, changed (true for the decisions where the
+// cloud disagreed with the robot), before (the next_before of the previous
+// page) and limit, all optional.
 func (h *Handler) listDecisions(c *gin.Context) {
 	var params db.ListDecisionsParams
 	var ok bool
@@ -46,24 +49,26 @@ func (h *Handler) listDecisions(c *gin.Context) {
 	if params.Before, ok = queryID(c, "before"); !ok {
 		return
 	}
-	if s := c.Query("status"); s != "" {
-		if !statuses[s] {
-			httperr.BadRequest(c, "unknown status "+strconv.Quote(s))
-			return
-		}
-		params.Status = &s
+	if params.Status, ok = queryOneOf(c, "status", statuses); !ok {
+		return
 	}
-	limit := defaultPageSize
-	if s := c.Query("limit"); s != "" {
-		n, err := strconv.Atoi(s)
-		if err != nil || n < 1 || n > maxPageSize {
-			httperr.BadRequest(c, "limit must be a number from 1 to 200")
+	if params.Source, ok = queryOneOf(c, "source", sources); !ok {
+		return
+	}
+	if s := c.Query("changed"); s != "" {
+		changed, err := strconv.ParseBool(s)
+		if err != nil {
+			httperr.BadRequest(c, "changed must be true or false")
 			return
 		}
-		limit = n
+		params.Changed = changed
+	}
+	limit, ok := queryLimit(c)
+	if !ok {
+		return
 	}
 	// One row more than the page tells whether another page follows.
-	params.RowLimit = int32(limit + 1)
+	params.RowLimit = int32(limit + 1) //nolint:gosec // queryLimit caps it at maxPageSize
 
 	rows, err := h.q.ListDecisions(c.Request.Context(), params)
 	if err != nil {
@@ -148,6 +153,34 @@ func (h *Handler) frame(c *gin.Context) {
 
 // queryID parses an optional UUID query parameter. On failure it answers
 // 400 and returns false.
+// queryLimit reads the page size, defaultPageSize when it isn't given.
+func queryLimit(c *gin.Context) (int, bool) {
+	s := c.Query("limit")
+	if s == "" {
+		return defaultPageSize, true
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 || n > maxPageSize {
+		httperr.BadRequest(c, "limit must be a number from 1 to 200")
+		return 0, false
+	}
+	return n, true
+}
+
+// queryOneOf reads an optional query parameter that takes one of the
+// allowed values.
+func queryOneOf(c *gin.Context, name string, allowed map[string]bool) (*string, bool) {
+	s := c.Query(name)
+	if s == "" {
+		return nil, true
+	}
+	if !allowed[s] {
+		httperr.BadRequest(c, "unknown "+name+" "+strconv.Quote(s))
+		return nil, false
+	}
+	return &s, true
+}
+
 func queryID(c *gin.Context, name string) (*uuid.UUID, bool) {
 	s := c.Query(name)
 	if s == "" {

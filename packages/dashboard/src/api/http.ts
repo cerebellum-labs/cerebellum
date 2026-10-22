@@ -1,6 +1,6 @@
 // The dashboard API on the server: JSON over HTTP, with the admin session in
 // a cookie the page can't read, and events over one shared WebSocket.
-import type { DashboardApi } from './client'
+import type { Connection, DashboardApi } from './client'
 import { ApiError } from './errors'
 import type { Correction, DashboardEvent, DecisionPage, DecisionView, DeviceView, Stats } from './types'
 
@@ -53,10 +53,12 @@ export function createHttpApi(baseUrl: string): DashboardApi {
       await request('DELETE', `/devices/${deviceId}`)
     },
 
-    listDecisions({ device_id, status, before, limit }) {
+    listDecisions({ device_id, status, source, changed, before, limit }) {
       const query = new URLSearchParams()
       if (device_id) query.set('device_id', device_id)
       if (status) query.set('status', status)
+      if (source) query.set('source', source)
+      if (changed) query.set('changed', 'true')
       if (before) query.set('before', before)
       if (limit) query.set('limit', String(limit))
       const qs = query.size ? `?${query}` : ''
@@ -80,6 +82,8 @@ export function createHttpApi(baseUrl: string): DashboardApi {
         if (listeners.size === 0) stream.close()
       }
     },
+    connection: () => stream.state(),
+    onConnection: (listener) => stream.onState(listener),
   }
 }
 
@@ -110,6 +114,14 @@ function createStream(url: string, emit: (event: DashboardEvent) => void) {
   let delay = RECONNECT_MIN_MS
   let wanted = false
   let dropped = false
+  let state: Connection = 'connecting'
+  const stateListeners = new Set<() => void>()
+
+  function setState(next: Connection) {
+    if (next === state) return
+    state = next
+    for (const listener of stateListeners) listener()
+  }
 
   function connect() {
     timer = undefined
@@ -119,6 +131,7 @@ function createStream(url: string, emit: (event: DashboardEvent) => void) {
       delay = RECONNECT_MIN_MS
       if (dropped) emit({ type: 'stream.reconnected' })
       dropped = false
+      setState('open')
     }
     ws.onmessage = (message) => {
       try {
@@ -131,6 +144,7 @@ function createStream(url: string, emit: (event: DashboardEvent) => void) {
       if (socket !== ws || !wanted) return
       socket = null
       dropped = true
+      setState('reconnecting')
       timer = window.setTimeout(connect, delay)
       delay = Math.min(delay * 2, RECONNECT_MAX_MS)
     }
@@ -147,6 +161,14 @@ function createStream(url: string, emit: (event: DashboardEvent) => void) {
       timer = undefined
       socket?.close()
       socket = null
+      setState('connecting')
+    },
+    state: () => state,
+    onState(listener: () => void) {
+      stateListeners.add(listener)
+      return () => {
+        stateListeners.delete(listener)
+      }
     },
   }
 }

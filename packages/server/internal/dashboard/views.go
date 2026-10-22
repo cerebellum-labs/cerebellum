@@ -33,8 +33,13 @@ func newStatsView(d db.DecisionStatsRow, m db.ModelCallStatsRow) statsView {
 		},
 		Corrections: d.Corrections,
 		CostUsd:     m.CostUsd,
-		// The device's own latency isn't reported to the server.
+		// Null until there is something to average: older agents don't
+		// report how long the local model took.
 		AvgLatencyMs: map[string]*float64{"device": nil, "server": nil},
+	}
+	if d.DeviceLatencies > 0 {
+		avg := d.AvgDeviceLatencyMs
+		v.AvgLatencyMs["device"] = &avg
 	}
 	if m.DecideCalls > 0 {
 		avg := m.AvgDecideLatencyMs

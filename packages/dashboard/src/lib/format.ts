@@ -1,5 +1,6 @@
 const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto', style: 'short' })
 const clock = new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+const dayOnly = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' })
 const dateTime = new Intl.DateTimeFormat('en', {
   month: 'short',
   day: 'numeric',
@@ -24,6 +25,11 @@ export function timeAgo(iso: string, now = Date.now()): string {
 /** Local wall-clock time of the event, "14:03:11". */
 export function clockTime(iso: string): string {
   return clock.format(new Date(iso))
+}
+
+/** The day alone, "Oct 19": when a device was added. */
+export function day(iso: string): string {
+  return dayOnly.format(new Date(iso))
 }
 
 export function fullTime(iso: string): string {

@@ -1,12 +1,17 @@
-import { GithubLogo, SignIn, SignOut, Trophy } from '@phosphor-icons/react'
+import { GithubLogo, SignIn, SignOut, Trophy, WifiHigh } from '@phosphor-icons/react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, NavLink, Outlet } from 'react-router'
+import { useEffect } from 'react'
+import { Link, NavLink, Outlet, useLocation } from 'react-router'
 
-import { api } from '@/api/client'
+import { api, simulator } from '@/api/client'
 import { useAdmin } from '@/app/context'
 import { Led } from '@/components/led'
 import { Mark } from '@/components/mark'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useNow } from '@/hooks/use-now'
+import { useRobot } from '@/hooks/use-robot'
+import { count, duration } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -17,6 +22,11 @@ const NAV = [
 
 export function Layout() {
   const admin = useAdmin()
+  const { pathname } = useLocation()
+  // A new page starts at its top; a query change (?decision=) keeps the place.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
   const devices = useQuery({ queryKey: ['devices'], queryFn: () => api.listDevices() })
   const online = devices.data?.filter((d) => d.online).length ?? 0
   const total = devices.data?.length ?? 0
@@ -54,6 +64,8 @@ export function Layout() {
           </nav>
 
           <div className="ml-auto flex items-center gap-4">
+            <OfflineNotice />
+            {devices.isPending && <Skeleton aria-hidden className="hidden h-4 w-20 md:block" />}
             {devices.data && (
               <Link
                 to="/devices"
@@ -86,6 +98,37 @@ export function Layout() {
       </main>
     </div>
   )
+}
+
+/**
+ * While the robots are off the network, every page says so; the demo's
+ * simulator can also bring the network back from here.
+ */
+function OfflineNotice() {
+  const robot = useRobot()
+  if (robot.online) return null
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex items-center gap-2 rounded-full border border-led-amber/40 bg-led-amber/[0.08] px-2.5 py-1 text-xs text-led-amber">
+        <Led color="amber" />
+        <span>
+          Offline
+          {robot.offlineSince ? <OfflineFor since={robot.offlineSince} /> : null}
+          {robot.queued ? <span className="max-sm:hidden"> · {count(robot.queued)} queued</span> : null}
+        </span>
+      </span>
+      {robot.simulated && (
+        <Button size="sm" onClick={() => simulator?.setOnline(true)}>
+          <WifiHigh /> <span className="max-sm:sr-only">Restore</span>
+        </Button>
+      )}
+    </div>
+  )
+}
+
+function OfflineFor({ since }: { since: number }) {
+  const now = useNow(1_000)
+  return <span className="readout max-sm:hidden"> {duration(Math.max(0, now - since))}</span>
 }
 
 /** The page is a hackathon demo, not a product someone runs: say so first, like a label on the hardware. */

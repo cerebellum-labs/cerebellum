@@ -169,7 +169,7 @@ func onDevice() map[string]any {
 	return map[string]any{
 		"id": uuid.Must(uuid.NewV7()), "revision": 1, "task": "sort_item", "options": []string{"basket", "discard"},
 		"action_class": "reversible", "proposed_action": "basket", "action": "basket",
-		"local_model": "yolox-nano", "local_confidence": 0.94, "decided_at": time.Now().UTC(),
+		"local_model": "yolox-nano", "local_confidence": 0.94, "local_latency_ms": 36, "decided_at": time.Now().UTC(),
 	}
 }
 
@@ -179,6 +179,7 @@ type decisionOut struct {
 	Source     *string   `json:"source"`
 	Action     *string   `json:"action"`
 	Model      *string   `json:"model"`
+	LatencyMs  *int32    `json:"latency_ms"`
 	CostUsd    *float64  `json:"cost_usd"`
 	HasFrame   bool      `json:"has_frame"`
 	Revision   int32     `json:"revision"`
@@ -366,6 +367,9 @@ func TestSync(t *testing.T) {
 	if len(out.Decisions) != 1 || out.Decisions[0].Status != "decided_on_device" || !out.Decisions[0].HasFrame || out.ServerTime == "" {
 		t.Fatalf("first sync = %+v", out)
 	}
+	if got := out.Decisions[0].LatencyMs; got == nil || *got != 36 {
+		t.Errorf("latency_ms = %v, want the local model's 36", got)
+	}
 
 	// Executed: a higher revision applies.
 	d["revision"], d["executed_at"] = 2, time.Now().UTC()
@@ -405,13 +409,18 @@ func TestSyncRejects(t *testing.T) {
 	delete(noAction, "action")
 	v4 := onDevice()
 	v4["id"] = uuid.New()
+	negative := onDevice()
+	negative["local_latency_ms"] = -1
 
 	var out syncOut
 	api.post("/api/v1/sync", otherToken, map[string]any{"items": []any{
-		map[string]any{"decision": stolen}, map[string]any{"decision": noAction}, map[string]any{"decision": v4},
+		map[string]any{"decision": stolen},
+		map[string]any{"decision": noAction},
+		map[string]any{"decision": v4},
+		map[string]any{"decision": negative},
 	}}, &out)
-	if len(out.Errors) != 3 || len(out.Decisions) != 0 {
-		t.Fatalf("response = %+v, want three errors", out)
+	if len(out.Errors) != 4 || len(out.Decisions) != 0 {
+		t.Fatalf("response = %+v, want four errors", out)
 	}
 	var executed bool
 	if err := api.pool.QueryRow(t.Context(), `SELECT executed_at IS NOT NULL FROM decisions WHERE id = $1`, mine["id"]).Scan(&executed); err != nil {

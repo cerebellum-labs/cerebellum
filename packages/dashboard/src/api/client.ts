@@ -31,7 +31,14 @@ export interface DashboardApi {
 
   /** Server events (WebSocket /api/dashboard/ws). Returns the unsubscribe function. */
   subscribe(listener: (event: DashboardEvent) => void): () => void
+  /** The state of the event stream, for showing whether the page is live. */
+  connection(): Connection
+  /** Calls `listener` when the stream's state changes. Returns the unsubscribe function. */
+  onConnection(listener: () => void): () => void
 }
+
+/** The event stream: opening, open, or broken and trying again. */
+export type Connection = 'connecting' | 'open' | 'reconnecting'
 
 /** What the simulated robot is doing right now, beyond what the server sees. */
 export interface RobotState {
