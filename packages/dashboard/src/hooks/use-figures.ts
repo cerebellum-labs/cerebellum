@@ -4,14 +4,24 @@ import { cloudDisagreed } from '@/lib/decision'
 
 const average = (values: number[]) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : null)
 
+/** The middle value: what a typical decision takes, not pulled up by the few slow ones. */
+function median(values: number[]): number | null {
+  if (!values.length) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+}
+
 /** What the same decisions would have taken with the cloud answering every one. */
 function figures(rows: DecisionView[]): Figures | null {
   const decided = rows.filter((d) => d.source)
-  const cloud = average(rows.filter((d) => d.source === 'server' && d.latency_ms != null).map((d) => d.latency_ms!))
+  const cloudTimes = rows.filter((d) => d.source === 'server' && d.latency_ms != null).map((d) => d.latency_ms!)
+  const cloud = average(cloudTimes)
   if (cloud == null) return null
   // A decision on the device takes milliseconds against the cloud's seconds;
   // from an agent that doesn't report how long, it counts as no wait at all.
-  const blended = average(decided.map((d) => d.latency_ms ?? (d.source === 'device' ? 0 : cloud)))
+  const times = decided.map((d) => d.latency_ms ?? (d.source === 'device' ? 0 : cloud))
+  const blended = average(times)
   const perCall = average(rows.filter((d) => d.source === 'server' && d.cost_usd).map((d) => d.cost_usd!)) ?? 0
   const spent = rows.reduce((sum, d) => sum + (d.cost_usd ?? 0), 0)
   if (blended == null) return null
@@ -19,6 +29,8 @@ function figures(rows: DecisionView[]): Figures | null {
     decided: decided.length,
     cloud,
     blended,
+    cloudTypical: median(cloudTimes)!,
+    typical: median(times)!,
     spent,
     cloudOnly: decided.length * perCall,
     // The robot alone would have done the wrong thing: the cloud is taken as right.
@@ -33,6 +45,9 @@ export interface Figures {
   /** Average time to decide, ms: in the cloud, and overall. */
   cloud: number
   blended: number
+  /** Median time to decide, ms: in the cloud, and overall. */
+  cloudTypical: number
+  typical: number
   spent: number
   /** What the cloud would have cost answering every decision. */
   cloudOnly: number

@@ -11,7 +11,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route index element={<OverviewPage />} />
         <Route path="journal" element={<JournalPage />} />
-        <Route path="devices" element={<DevicesPage />} />
+        <Route path="robots" element={<DevicesPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

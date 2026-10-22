@@ -123,9 +123,9 @@ function SignInDialog({
       <DialogContent className="sm:max-w-sm">
         <form onSubmit={submit} className="grid gap-4">
           <DialogHeader>
-            <DialogTitle>Sign in to manage devices</DialogTitle>
+            <DialogTitle>Sign in to manage robots</DialogTitle>
             <DialogDescription>
-              Anyone can watch the journal. Adding devices, issuing tokens and deleting devices need the dashboard
+              Anyone can watch the demo. Adding robots, issuing tokens and deleting robots need the dashboard
               password.
             </DialogDescription>
           </DialogHeader>

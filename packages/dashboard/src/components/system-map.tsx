@@ -177,7 +177,7 @@ export function SystemMap() {
       <>
         <span className="font-medium">No robots yet.</span>{' '}
         <span className="text-muted-foreground">
-          <Link to="/devices" className="underline underline-offset-4 hover:text-foreground">
+          <Link to="/robots" className="underline underline-offset-4 hover:text-foreground">
             Add one
           </Link>{' '}
           and its decisions show up here.
@@ -226,9 +226,14 @@ export function SystemMap() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="grid max-w-[70ch] gap-1">
             <h2 id="system-title" className="text-xl font-semibold tracking-tight">
-              Live system
+              The live demo
             </h2>
-            <p className="text-sm text-muted-foreground">Each dot is a decision happening now.</p>
+            {/* What the visitor is watching: the demo robot, said once, so
+                basket, discard and stop make sense everywhere else. */}
+            <p className="text-sm text-pretty text-muted-foreground">
+              {robot.simulated ? 'A simulated robot' : 'A Raspberry Pi with a camera'} sorts fruit: fruit goes in the
+              basket, anything else is thrown out. Each dot is one of its decisions on the way.
+            </p>
           </div>
           {robot.simulated && (
             <Button

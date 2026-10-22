@@ -20,7 +20,8 @@ export function PageHeader({
         </h1>
         <p className="max-w-[68ch] text-sm text-muted-foreground">{description}</p>
       </div>
-      {children && <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">{children}</div>}
+      {/* On phones the controls share the full width equally, one or two. */}
+      {children && <div className="flex w-full gap-2 *:min-w-0 *:flex-1 sm:w-auto sm:*:flex-none">{children}</div>}
     </div>
   )
 }
