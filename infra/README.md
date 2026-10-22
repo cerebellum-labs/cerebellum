@@ -5,7 +5,7 @@ Runs the server behind a [Cloudflare Tunnel](https://developers.cloudflare.com/c
 ## Run
 
 1. In Cloudflare Zero Trust, create a tunnel and add a published application with service URL `http://server:8080`.
-2. Copy `.env.example` to `.env`, paste the tunnel token and set a database password.
+2. Copy `.env.example` to `.env`: the tunnel token, a database password, the dashboard password and session secret, and the dashboard's origin if it runs on a host of its own.
 3. Start:
    ```bash
    docker compose up -d --wait

@@ -11,6 +11,62 @@ import (
 	"github.com/google/uuid"
 )
 
+const createDevice = `-- name: CreateDevice :one
+INSERT INTO devices (key, name, token_hash)
+VALUES ($1, $2, $3)
+RETURNING id, key, name, token_hash, metadata, agent_version, last_seen_at, created_at, deleted_at
+`
+
+type CreateDeviceParams struct {
+	Key       string
+	Name      string
+	TokenHash []byte
+}
+
+func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error) {
+	row := q.db.QueryRow(ctx, createDevice, arg.Key, arg.Name, arg.TokenHash)
+	var i Device
+	err := row.Scan(
+		&i.ID,
+		&i.Key,
+		&i.Name,
+		&i.TokenHash,
+		&i.Metadata,
+		&i.AgentVersion,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const deleteDevice = `-- name: DeleteDevice :one
+UPDATE devices
+SET deleted_at = now()
+WHERE id = $1
+  AND deleted_at IS NULL
+RETURNING id, key, name, token_hash, metadata, agent_version, last_seen_at, created_at, deleted_at
+`
+
+// DeleteDevice marks the device deleted: its token stops working, its
+// journal stays.
+func (q *Queries) DeleteDevice(ctx context.Context, id uuid.UUID) (Device, error) {
+	row := q.db.QueryRow(ctx, deleteDevice, id)
+	var i Device
+	err := row.Scan(
+		&i.ID,
+		&i.Key,
+		&i.Name,
+		&i.TokenHash,
+		&i.Metadata,
+		&i.AgentVersion,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const getDeviceByTokenHash = `-- name: GetDeviceByTokenHash :one
 SELECT id, key, name
 FROM devices
@@ -30,5 +86,77 @@ func (q *Queries) GetDeviceByTokenHash(ctx context.Context, tokenHash []byte) (G
 	row := q.db.QueryRow(ctx, getDeviceByTokenHash, tokenHash)
 	var i GetDeviceByTokenHashRow
 	err := row.Scan(&i.ID, &i.Key, &i.Name)
+	return i, err
+}
+
+const listDevices = `-- name: ListDevices :many
+
+SELECT id, key, name, token_hash, metadata, agent_version, last_seen_at, created_at, deleted_at
+FROM devices
+WHERE deleted_at IS NULL
+ORDER BY created_at, id
+`
+
+// The device queries below return the whole row, so they share the Device
+// model; token_hash never leaves the server.
+func (q *Queries) ListDevices(ctx context.Context) ([]Device, error) {
+	rows, err := q.db.Query(ctx, listDevices)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Device
+	for rows.Next() {
+		var i Device
+		if err := rows.Scan(
+			&i.ID,
+			&i.Key,
+			&i.Name,
+			&i.TokenHash,
+			&i.Metadata,
+			&i.AgentVersion,
+			&i.LastSeenAt,
+			&i.CreatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rotateDeviceToken = `-- name: RotateDeviceToken :one
+UPDATE devices
+SET token_hash = $2
+WHERE id = $1
+  AND deleted_at IS NULL
+RETURNING id, key, name, token_hash, metadata, agent_version, last_seen_at, created_at, deleted_at
+`
+
+type RotateDeviceTokenParams struct {
+	ID        uuid.UUID
+	TokenHash []byte
+}
+
+// RotateDeviceToken replaces the token hash: the old token stops working at
+// once.
+func (q *Queries) RotateDeviceToken(ctx context.Context, arg RotateDeviceTokenParams) (Device, error) {
+	row := q.db.QueryRow(ctx, rotateDeviceToken, arg.ID, arg.TokenHash)
+	var i Device
+	err := row.Scan(
+		&i.ID,
+		&i.Key,
+		&i.Name,
+		&i.TokenHash,
+		&i.Metadata,
+		&i.AgentVersion,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
 	return i, err
 }

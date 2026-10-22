@@ -1,3 +1,4 @@
+import { createHttpApi } from './http'
 import { createMockApi } from './mock'
 import type {
   ActionClass,
@@ -13,7 +14,7 @@ import type {
 
 export { ApiError } from './errors'
 
-/** The dashboard API from section 7 of the spec. */
+/** The dashboard API (packages/server/internal/dashboard). */
 export interface DashboardApi {
   login(password: string): Promise<void>
   logout(): Promise<void>
@@ -55,10 +56,11 @@ export interface Simulator {
   subscribe(listener: (event: RobotEvent) => void): () => void
 }
 
-// Until the server implements section 7, the dashboard runs on an in-memory
-// mock with a simulated fruit sorter. An HTTP implementation of this same
-// interface replaces it here, with no simulator.
-const mock = createMockApi()
-export const api: DashboardApi = mock.api
-export const simulator: Simulator | null = mock.simulator
-export const isMock = true
+// The server's API, unless VITE_API_MOCK=true asks for the in-memory mock
+// with a simulated fruit sorter: for a demo without a robot, and the only
+// one with a simulator. Vite replaces the flag at build time, so a build for
+// the server leaves the mock out.
+const mock = import.meta.env.VITE_API_MOCK === 'true' ? createMockApi() : null
+export const api: DashboardApi = mock?.api ?? createHttpApi(import.meta.env.VITE_API_URL ?? '')
+export const simulator: Simulator | null = mock?.simulator ?? null
+export const isMock = mock !== null

@@ -1,0 +1,3 @@
+# An operator dashboard, not a site for search engines.
+User-agent: *
+Disallow: /

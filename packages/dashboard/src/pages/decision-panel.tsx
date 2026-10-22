@@ -87,11 +87,6 @@ export function DecisionPanel({ id, bare, onClose }: { id: string; bare?: boolea
           <Field label="Decided at" mono>
             {fullTime(d.decided_at)}
           </Field>
-          {d.attempts > 0 && (
-            <Field label="Failed attempts" mono>
-              {d.attempts}
-            </Field>
-          )}
         </Section>
 
         {(d.input_tokens != null || (d.cost_usd ?? 0) > 0) && (

@@ -10,4 +10,11 @@ export default defineConfig({
     // Matches "paths" in tsconfig.json: @/components/ui/button → src/components/ui/button.
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
+  server: {
+    // In development the page and the API share this origin: /api goes to
+    // the server (make db run in packages/server), the WebSocket included.
+    proxy: {
+      '/api': { target: process.env.API_PROXY_TARGET ?? 'http://localhost:8080', ws: true },
+    },
+  },
 })

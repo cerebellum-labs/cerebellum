@@ -33,3 +33,8 @@ sql:
           # Exact in the database; float64 is plenty for showing and summing.
           - db_type: pg_catalog.numeric
             go_type: float64
+          - db_type: pg_catalog.numeric
+            nullable: true
+            go_type:
+              type: float64
+              pointer: true

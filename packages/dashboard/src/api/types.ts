@@ -1,4 +1,5 @@
-// Types of the dashboard API, as in the spec (sections 3, 4 and 7).
+// Types of the dashboard API, as the server sends them
+// (packages/server/internal/dashboard).
 
 export type UUID = string
 /** ISO 8601, always UTC with Z: "2026-10-21T18:09:00.123Z". */
@@ -16,36 +17,48 @@ export type DecisionStatus =
   | 'cancelled'
 
 export interface Decision {
+  /** UUIDv7 made by the robot's agent: ids sort by when the decision was made. */
   id: UUID
+  device_id: UUID
   task: string
   options: string[]
   action_class: ActionClass
   status: DecisionStatus
+  /** Who decided: null while the server hasn't answered. */
+  source: DecisionSource | null
   needs_review: boolean
-  attempts: number
   metadata: Json
-  decided_at: ISODateTime
-  updated_at: ISODateTime
 
-  device_id: UUID | null
   proposed_action: string | null
   action: string | null
-  source: DecisionSource | null
-  model: string | null
-  confidence: number | null
-  reason: string | null
   prompt: string | null
   local_model: string | null
   local_confidence: number | null
+  /** The model behind the action: the local one on the device, the cloud one on the server. */
+  model: string | null
+  confidence: number | null
+  /** The cloud model's explanation of a server decision. */
+  reason: string | null
+  /** The cloud call of a server decision: how long it took and what it cost. */
   latency_ms: number | null
   cost_usd: number | null
   input_tokens: number | null
   output_tokens: number | null
+  /** Why the robot cancelled, like the item leaving before the answer. */
+  cancel_reason: string | null
+
+  /** The robot's clock. */
+  decided_at: ISODateTime
+  /** The server's clock: when the decision first reached it. */
+  received_at: ISODateTime
+  /** When the cloud model answered a server decision. */
+  answered_at: ISODateTime | null
   executed_at: ISODateTime | null
+  cancelled_at: ISODateTime | null
   reviewed_at: ISODateTime | null
-  synced_at: ISODateTime | null
 }
 
+/** A review that disagreed with the device. A decision has one at most, and it shares the decision's id. */
 export interface Correction {
   id: UUID
   decision_id: UUID
@@ -72,11 +85,7 @@ export type DecisionView = Decision & {
   device_key: string
   device_name: string
   has_frame: boolean
-  /**
-   * The action of the latest correction, null if there is none. Corrections
-   * are separate records, so the journal gets it joined in to show both
-   * answers without loading every decision's corrections.
-   */
+  /** The correction's action, null if there is none: the journal shows both answers. */
   corrected_action: string | null
 }
 
@@ -94,16 +103,20 @@ export type DashboardEvent =
   | { type: 'decision.upserted'; decision: DecisionView }
   | { type: 'correction.created'; correction: Correction }
   | { type: 'device.updated'; device: DeviceView }
+  /** The event stream is back after a break: what was sent meanwhile is lost. */
+  | { type: 'stream.reconnected' }
 
 export interface DecisionQuery {
   device_id?: UUID
   status?: DecisionStatus
-  before?: ISODateTime
+  /** next_before of the previous page. */
+  before?: UUID
   /** 50 by default, at most 200. */
   limit?: number
 }
 
 export interface DecisionPage {
   decisions: DecisionView[]
-  next_before: ISODateTime | null
+  /** The cursor of the next page, null after the last one. */
+  next_before: UUID | null
 }

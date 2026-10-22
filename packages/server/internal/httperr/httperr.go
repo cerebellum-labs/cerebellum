@@ -14,6 +14,11 @@ const (
 	CodeNotFound         = "not_found"
 	CodeMethodNotAllowed = "method_not_allowed"
 	CodePayloadTooLarge  = "payload_too_large"
+	CodeBadRequest       = "bad_request"
+	CodeUnauthorized     = "unauthorized"
+	CodeForbidden        = "forbidden"
+	CodeConflict         = "conflict"
+	CodeTooManyRequests  = "too_many_requests"
 )
 
 // Response is the error envelope: {"error":{"code":"...","message":"..."}}.
@@ -54,4 +59,36 @@ func PayloadTooLarge(c *gin.Context) {
 // InternalError answers 500 with a generic message so internals never leak.
 func InternalError(c *gin.Context) {
 	Abort(c, http.StatusInternalServerError, CodeInternalError, "internal server error")
+}
+
+// BadRequest answers 400 for a request the server can't accept; message
+// tells the client what to fix.
+func BadRequest(c *gin.Context, message string) {
+	Abort(c, http.StatusBadRequest, CodeBadRequest, message)
+}
+
+// Unauthorized answers 401 for a request that needs a session it doesn't
+// have.
+func Unauthorized(c *gin.Context, message string) {
+	Abort(c, http.StatusUnauthorized, CodeUnauthorized, message)
+}
+
+// Forbidden answers 403 for a request the server refuses whoever sends it.
+func Forbidden(c *gin.Context, message string) {
+	Abort(c, http.StatusForbidden, CodeForbidden, message)
+}
+
+// Missing answers 404 for a resource that doesn't exist.
+func Missing(c *gin.Context, message string) {
+	Abort(c, http.StatusNotFound, CodeNotFound, message)
+}
+
+// Conflict answers 409 for a request that clashes with what already exists.
+func Conflict(c *gin.Context, message string) {
+	Abort(c, http.StatusConflict, CodeConflict, message)
+}
+
+// TooManyRequests answers 429 when a client has to slow down.
+func TooManyRequests(c *gin.Context, message string) {
+	Abort(c, http.StatusTooManyRequests, CodeTooManyRequests, message)
 }

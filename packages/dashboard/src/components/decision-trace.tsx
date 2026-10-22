@@ -57,7 +57,7 @@ function stepsOf(d: DecisionView, corrections: Correction[]): Step[] {
 
   if (d.source === 'server') {
     steps.push({
-      at: Date.parse(d.synced_at ?? d.updated_at),
+      at: Date.parse(d.answered_at ?? d.received_at),
       light: actionLight(d.action),
       title: `Cloud model answered: ${humanize(d.action ?? '')}`,
       sync: true,
@@ -73,18 +73,18 @@ function stepsOf(d: DecisionView, corrections: Correction[]): Step[] {
   }
   if (d.status === 'waiting_for_server') steps.push({ at: null, light: 'amber', title: 'Waiting for the cloud model' })
   if (d.status === 'cancelled') {
-    steps.push({ at: Date.parse(d.updated_at), light: 'off', title: 'Cancelled', detail: d.reason ?? undefined })
+    steps.push({
+      at: d.cancelled_at ? Date.parse(d.cancelled_at) : null,
+      light: 'off',
+      title: 'Cancelled',
+      detail: d.cancel_reason ?? undefined,
+    })
   }
   if (d.executed_at) {
     steps.push({ at: Date.parse(d.executed_at), light: actionLight(d.action), title: `Robot acted: ${humanize(d.action ?? '')}` })
   }
-  if (d.source === 'device') {
-    steps.push(
-      d.synced_at
-        ? { at: Date.parse(d.synced_at), title: 'Reached the server', sync: true }
-        : { at: null, title: 'Not synced yet' },
-    )
-  }
+  // The server sees a device decision only once it is synced.
+  if (d.source === 'device') steps.push({ at: Date.parse(d.received_at), title: 'Reached the server', sync: true })
 
   for (const c of corrections) {
     steps.push({

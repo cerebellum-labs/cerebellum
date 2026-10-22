@@ -70,7 +70,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger) (err 
 	}
 	for _, r := range results {
 		logger.LogAttrs(ctx, slog.LevelInfo, "migration applied",
-			slog.Int64("version", r.Source.Version),
+			slog.Int64("migration", r.Source.Version),
 			slog.Float64("duration_ms", float64(r.Duration.Microseconds())/1000),
 		)
 	}
