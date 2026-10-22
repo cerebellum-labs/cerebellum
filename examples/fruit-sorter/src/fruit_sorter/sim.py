@@ -13,7 +13,7 @@ from .detector import Detection
 WIDTH, HEIGHT = 640, 480
 CENTER = (320, 264)
 BOX = (270, 214, 370, 314)
-SCENES = ("empty", "orange", "uncertain_orange", "cup", "kiwi", "person")
+SCENES = ("empty", "orange", "uncertain_orange", "cup", "kiwi", "person", "shadow")
 
 
 @dataclass
@@ -29,6 +29,9 @@ def render(scene: str) -> np.ndarray:
         cv2.rectangle(frame, (275, 214), (365, 314), (250, 250, 250), -1)
     elif scene == "kiwi":
         cv2.ellipse(frame, CENTER, (55, 40), 0, 0, 360, (50, 100, 80), -1)
+    elif scene == "shadow":
+        # What the real camera sees when someone stands beside the platform: a dark strip along the edge of the zone.
+        cv2.rectangle(frame, (96, 72), (130, 280), (120, 120, 120), -1)
     elif scene == "person":
         cv2.rectangle(frame, (0, 60), (230, HEIGHT), (120, 130, 190), -1)
     elif scene != "empty":

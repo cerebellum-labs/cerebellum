@@ -32,7 +32,7 @@ RULES = {
         },
     },
     "actions": {
-        "basket": {"class": "reversible", "review_below": 0.8},
+        "basket": {"class": "reversible", "review_below": 0.9},
         "discard": {"class": "irreversible"},
         "stop": {"class": "reflex"},
     },
