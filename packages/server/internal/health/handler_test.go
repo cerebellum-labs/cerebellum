@@ -14,6 +14,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestHealth(t *testing.T) {
+	t.Parallel()
 	r := gin.New()
 	Register(r)
 
@@ -26,6 +27,7 @@ func TestHealth(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.method, func(t *testing.T) {
+			t.Parallel()
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest(tt.method, Path, nil))
 

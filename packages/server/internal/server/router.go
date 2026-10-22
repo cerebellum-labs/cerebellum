@@ -2,6 +2,8 @@
 package server
 
 import (
+	"log/slog"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/cerebellum-labs/cerebellum/packages/server/internal/health"
@@ -10,7 +12,7 @@ import (
 
 // NewRouter builds the gin engine with production defaults. gin.SetMode must
 // be called before this, since gin reads the mode when the engine is created.
-func NewRouter() (*gin.Engine, error) {
+func NewRouter(logger *slog.Logger) (*gin.Engine, error) {
 	r := gin.New()
 
 	// Trust no proxy headers by default: otherwise any client can spoof its
@@ -29,8 +31,8 @@ func NewRouter() (*gin.Engine, error) {
 	// with its 500.
 	r.Use(
 		requestID,
-		accessLog,
-		recovery,
+		accessLog(logger),
+		recovery(logger),
 		bodyLimit,
 	)
 

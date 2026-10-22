@@ -4,30 +4,27 @@ import (
 	"crypto/rand"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/cerebellum-labs/cerebellum/packages/server/internal/logging"
 )
 
 // HeaderRequestID carries the id that ties a request to its log records.
 const HeaderRequestID = "X-Request-ID"
 
-const (
-	contextKeyRequestID = "request_id"
-	maxRequestIDLen     = 64
-)
+const maxRequestIDLen = 64
 
 // requestID reuses the caller's X-Request-ID, so a device can match its own
-// logs with ours, or generates one. It echoes the id back on the response.
+// logs with ours, or generates one. It echoes the id back on the response
+// and puts it in the request context, where the logger picks it up for every
+// record logged while handling the request.
 func requestID(c *gin.Context) {
 	id := c.GetHeader(HeaderRequestID)
 	if !validRequestID(id) {
 		id = rand.Text()
 	}
-	c.Set(contextKeyRequestID, id)
+	c.Request = c.Request.WithContext(logging.WithRequestID(c.Request.Context(), id))
 	c.Header(HeaderRequestID, id)
 	c.Next()
-}
-
-func requestIDFrom(c *gin.Context) string {
-	return c.GetString(contextKeyRequestID)
 }
 
 // validRequestID accepts short ids of letters, digits, '-', '_' and '.'.

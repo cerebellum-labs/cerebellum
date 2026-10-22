@@ -3,6 +3,9 @@ version: "2"
 run:
   timeout: 5m
   tests: true
+  # Lint the integration tests too.
+  build-tags:
+    - integration
 
 issues:
   max-issues-per-linter: 0
@@ -54,6 +57,7 @@ linters:
     # testing
     - thelper
     - usetesting
+    - paralleltest
     # modernization & meta
     - modernize
     - intrange
@@ -65,9 +69,6 @@ linters:
     # Blank-line rules the codebase has never followed; hundreds of
     # findings with no bearing on correctness.
     - wsl_v5
-    # Tests swap process-wide state (slog.Default, gin mode),
-    # so running them in parallel would race. The suite takes seconds.
-    - paralleltest
     - lll
     - prealloc
     - wrapcheck

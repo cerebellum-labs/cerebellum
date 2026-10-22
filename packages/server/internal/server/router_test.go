@@ -14,7 +14,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestRouterErrors(t *testing.T) {
-	r, err := NewRouter()
+	t.Parallel()
+	r, err := NewRouter(discardLogger)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}
@@ -37,6 +38,7 @@ func TestRouterErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest(tt.method, tt.path, nil))
 

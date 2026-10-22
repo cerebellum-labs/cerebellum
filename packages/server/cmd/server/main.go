@@ -1,81 +1,44 @@
-// Command server serves the Cerebellum server HTTP API.
+// Command server runs the Cerebellum server: the HTTP API for devices and
+// the dashboard, and its background work.
 package main
 
 import (
 	"context"
-	"errors"
 	"log/slog"
-	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"github.com/gin-gonic/gin"
-
-	"github.com/cerebellum-labs/cerebellum/packages/server/internal/server"
+	"github.com/cerebellum-labs/cerebellum/packages/server/internal/app"
+	"github.com/cerebellum-labs/cerebellum/packages/server/internal/config"
+	"github.com/cerebellum-labs/cerebellum/packages/server/internal/logging"
 )
 
 // version is set at build time via -ldflags "-X main.version=...".
 var version = "dev"
 
-const shutdownTimeout = 15 * time.Second
-
 func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	logger := logging.New(os.Stdout).With(slog.String("version", version))
+	// For libraries that log through slog's default logger.
+	slog.SetDefault(logger)
 
-	if err := run(); err != nil {
-		slog.Error("server stopped", "error", err)
+	if err := run(logger); err != nil {
+		logger.Error("server stopped", slog.Any("error", err))
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	gin.SetMode(gin.ReleaseMode)
-
-	cfg := loadConfig()
-
-	router, err := server.NewRouter()
+func run(logger *slog.Logger) error {
+	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		return err
 	}
 
-	srv := &http.Server{
-		Addr:              net.JoinHostPort("", cfg.port),
-		Handler:           router,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	// After the first signal, restore default handling, so a second Ctrl+C
+	// kills the process instead of waiting out a stuck drain.
+	context.AfterFunc(ctx, stop)
 
-	errCh := make(chan error, 1)
-	go func() {
-		slog.Info("server starting", "addr", srv.Addr, "version", version)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
-		}
-		close(errCh)
-	}()
-
-	select {
-	case err := <-errCh:
-		return err
-	case <-ctx.Done():
-	}
-	// Restore default signal handling, so a second Ctrl+C kills the process
-	// instead of waiting out a stuck drain.
-	stop()
-
-	slog.Info("shutting down")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		return err
-	}
-	return <-errCh
+	return app.Run(ctx, cfg, logger)
 }
