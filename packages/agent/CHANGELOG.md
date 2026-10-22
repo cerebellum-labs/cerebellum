@@ -4,4 +4,8 @@ All notable changes to the Cerebellum agent are listed here, in the [Keep a Chan
 
 ## [Unreleased]
 
+### Added
+
+- The agent library: rules, a decision journal and queue in SQLite (WAL), a background thread that asks the server for irreversible decisions and syncs everything else, corrections, and `on_decision`, `on_correction` and `on_connection` callbacks. It follows the server's [Agent API](../server/AGENT_API.md).
+
 [Unreleased]: https://github.com/cerebellum-labs/cerebellum/commits/main/packages/agent
