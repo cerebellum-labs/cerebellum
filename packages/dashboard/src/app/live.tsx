@@ -71,6 +71,10 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         case 'device.updated':
           void queryClient.invalidateQueries({ queryKey: ['devices'] })
           break
+        case 'stream.reconnected':
+          // Events sent during the break are lost: reload everything shown.
+          void queryClient.invalidateQueries()
+          break
       }
     })
 

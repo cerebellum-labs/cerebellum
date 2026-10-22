@@ -15,7 +15,9 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cerebellum-labs/cerebellum/packages/server/internal/config"
+	"github.com/cerebellum-labs/cerebellum/packages/server/internal/dashboard"
 	"github.com/cerebellum-labs/cerebellum/packages/server/internal/db"
+	"github.com/cerebellum-labs/cerebellum/packages/server/internal/events"
 	"github.com/cerebellum-labs/cerebellum/packages/server/internal/server"
 )
 
@@ -57,10 +59,23 @@ func run(
 		return err
 	}
 
-	srv, err := server.New(cfg.Port, logger)
+	hub := &events.Hub{}
+	dash := dashboard.New(db.New(pool), hub, dashboard.Config{
+		AdminPassword: cfg.AdminPassword,
+		SessionSecret: cfg.SessionSecret,
+		AllowedOrigin: cfg.DashboardOrigin,
+	}, logger)
+
+	srv, err := server.New(cfg.Port, logger,
+		server.WithAllowedOrigin(cfg.DashboardOrigin),
+		server.WithRoutes(dash.Register),
+	)
 	if err != nil {
 		return err
 	}
+	// Shutdown waits for requests but not for hijacked connections: closing
+	// the hub ends the event streams, so their WebSockets close too.
+	srv.RegisterOnShutdown(hub.Close)
 	ln, err := listen(ctx, srv.Addr)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", srv.Addr, err)

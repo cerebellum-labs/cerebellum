@@ -42,19 +42,16 @@ function base(deviceId: UUID, at: number, item: Item, label: string, localConfid
       options: ['basket', 'discard'],
       action_class: 'reversible',
       status: 'executed',
+      source: null,
       needs_review: false,
-      attempts: 0,
       metadata: {
         detector: { label, confidence: localConfidence },
         bbox,
         servo_angle: 90,
       },
-      decided_at: iso(at),
-      updated_at: iso(at),
       device_id: deviceId,
       proposed_action: null,
       action: null,
-      source: null,
       model: null,
       confidence: null,
       reason: null,
@@ -65,9 +62,13 @@ function base(deviceId: UUID, at: number, item: Item, label: string, localConfid
       cost_usd: null,
       input_tokens: null,
       output_tokens: null,
+      cancel_reason: null,
+      decided_at: iso(at),
+      received_at: iso(at + 2_000),
+      answered_at: null,
       executed_at: null,
+      cancelled_at: null,
       reviewed_at: null,
-      synced_at: iso(at + 2_000),
     },
   }
 }
@@ -85,7 +86,8 @@ function serverCall(d: Decision, action: string, confidence: number, reason: str
   d.input_tokens = input
   d.output_tokens = output
   d.cost_usd = (input * PRICE_INPUT_PER_M + output * PRICE_OUTPUT_PER_M) / 1e6
-  d.updated_at = iso(at + latency)
+  d.received_at = iso(at)
+  d.answered_at = iso(at + latency)
   return latency
 }
 
@@ -94,10 +96,7 @@ function onDevice(d: Decision, action: string, at: number) {
   d.model = LOCAL_MODEL
   d.action = action
   d.confidence = d.local_confidence
-  d.latency_ms = jitter(36, 6)
-  d.cost_usd = 0
   d.executed_at = iso(at + 400)
-  d.updated_at = d.executed_at
 }
 
 /**
@@ -112,7 +111,7 @@ export function build(kind: ScenarioKind, deviceId: UUID, at: number, offlineFor
       b.decision.status = 'executed'
       onDevice(b.decision, 'basket', at)
       b.decision.metadata.servo_angle = 30
-      if (offlineFor) b.decision.synced_at = iso(at + offlineFor)
+      if (offlineFor) b.decision.received_at = iso(at + offlineFor)
       return b
     }
     case 'cup':
@@ -132,8 +131,6 @@ export function build(kind: ScenarioKind, deviceId: UUID, at: number, offlineFor
       )
       d.status = 'executed'
       d.executed_at = iso(answeredAt + latency + 500)
-      d.updated_at = d.executed_at
-      d.synced_at = iso(answeredAt + latency)
       d.metadata.servo_angle = kiwi ? 30 : 150
       return b
     }
@@ -146,7 +143,7 @@ export function build(kind: ScenarioKind, deviceId: UUID, at: number, offlineFor
       d.metadata.servo_angle = 30
       const reviewedAt = at + offlineFor + 4_000
       const correction: Correction = {
-        id: newId(),
+        id: d.id,
         decision_id: d.id,
         action: 'discard',
         reason: 'A yellow tennis ball, not an orange.',
@@ -156,10 +153,6 @@ export function build(kind: ScenarioKind, deviceId: UUID, at: number, offlineFor
       }
       d.status = 'corrected'
       d.reviewed_at = iso(reviewedAt)
-      d.input_tokens = jitter(1_190, 60)
-      d.output_tokens = jitter(40, 8)
-      d.cost_usd = (d.input_tokens * PRICE_INPUT_PER_M + d.output_tokens * PRICE_OUTPUT_PER_M) / 1e6
-      d.updated_at = d.reviewed_at
       return { ...b, correction }
     }
     case 'hand': {
@@ -181,8 +174,9 @@ export function build(kind: ScenarioKind, deviceId: UUID, at: number, offlineFor
       d.proposed_action = 'discard'
       d.action_class = 'irreversible'
       d.status = 'cancelled'
-      d.reason = 'The item left the zone before the server answered.'
-      d.updated_at = iso(at + 1_200)
+      d.received_at = iso(at)
+      d.cancel_reason = 'The item left the zone before the server answered.'
+      d.cancelled_at = iso(at + 1_200)
       return b
     }
   }

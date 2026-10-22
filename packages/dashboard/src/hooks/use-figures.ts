@@ -11,12 +11,15 @@ function robotWasWrong(d: DecisionView): boolean {
 
 /** What the same decisions would have taken with the cloud answering every one. */
 function figures(rows: DecisionView[]): Figures | null {
-  const decided = rows.filter((d) => d.source && d.latency_ms != null)
-  const cloud = average(decided.filter((d) => d.source === 'server').map((d) => d.latency_ms!))
-  const blended = average(decided.map((d) => d.latency_ms!))
+  const decided = rows.filter((d) => d.source)
+  const cloud = average(rows.filter((d) => d.source === 'server' && d.latency_ms != null).map((d) => d.latency_ms!))
+  if (cloud == null) return null
+  // A decision on the device takes milliseconds against the cloud's seconds,
+  // and the server isn't told how long: it counts as no wait at all.
+  const blended = average(decided.map((d) => (d.source === 'device' ? 0 : (d.latency_ms ?? cloud))))
   const perCall = average(rows.filter((d) => d.source === 'server' && d.cost_usd).map((d) => d.cost_usd!)) ?? 0
   const spent = rows.reduce((sum, d) => sum + (d.cost_usd ?? 0), 0)
-  if (cloud == null || blended == null) return null
+  if (blended == null) return null
   return {
     decided: decided.length,
     cloud,

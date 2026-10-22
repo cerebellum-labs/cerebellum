@@ -12,7 +12,12 @@ import (
 
 // NewRouter builds the gin engine with production defaults. gin.SetMode must
 // be called before this, since gin reads the mode when the engine is created.
-func NewRouter(logger *slog.Logger) (*gin.Engine, error) {
+func NewRouter(logger *slog.Logger, opts ...Option) (*gin.Engine, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	r := gin.New()
 
 	// Trust no proxy headers by default: otherwise any client can spoof its
@@ -29,10 +34,13 @@ func NewRouter(logger *slog.Logger) (*gin.Engine, error) {
 	// The request id comes first so every later step can log it; recovery
 	// sits inside the access log, so a panicked request is still logged
 	// with its 500.
+	// CORS answers preflights before routing, which knows no OPTIONS.
 	r.Use(
 		requestID,
 		accessLog(logger),
 		recovery(logger),
+		noSniff,
+		cors(o.allowedOrigin),
 		bodyLimit,
 	)
 
@@ -40,6 +48,9 @@ func NewRouter(logger *slog.Logger) (*gin.Engine, error) {
 	r.NoMethod(httperr.MethodNotAllowed)
 
 	health.Register(r)
+	for _, register := range o.routes {
+		register(r)
+	}
 
 	return r, nil
 }

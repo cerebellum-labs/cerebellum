@@ -185,8 +185,9 @@ export function createMockApi(): { api: DashboardApi; simulator: Simulator } {
     const move = (t: string | null) => (t ? iso(Date.parse(t) + by) : null)
     return {
       ...d,
-      synced_at: move(d.synced_at),
-      updated_at: move(d.updated_at) ?? d.updated_at,
+      received_at: move(d.received_at) ?? d.received_at,
+      answered_at: move(d.answered_at),
+      cancelled_at: move(d.cancelled_at),
       reviewed_at: move(d.reviewed_at),
       executed_at: actedOffline ? d.executed_at : move(d.executed_at),
     }
@@ -219,9 +220,9 @@ export function createMockApi(): { api: DashboardApi; simulator: Simulator } {
         cost_usd: null,
         input_tokens: null,
         output_tokens: null,
+        answered_at: null,
         executed_at: null,
-        updated_at: iso(Date.now()),
-        synced_at: late ? iso(Date.now()) : null,
+        received_at: iso(Date.now()),
       })
       if (kind === 'removed') {
         later(1_200, () => upsert(final))
@@ -235,10 +236,10 @@ export function createMockApi(): { api: DashboardApi; simulator: Simulator } {
 
     if (kind === 'uncertain' && done.correction) {
       const correction = { ...done.correction, created_at: iso(Date.parse(done.correction.created_at) + by) }
-      upsert({ ...final, status: 'executed', reviewed_at: null, input_tokens: null, output_tokens: null, cost_usd: 0 })
+      upsert({ ...final, status: 'executed', reviewed_at: null })
       later(4_000, () => {
         corrections.set(correction.id, { ...correction, applied_at: null })
-        upsert({ ...final, updated_at: iso(Date.now()) })
+        upsert(final)
         emit({ type: 'correction.created', correction: { ...correction, applied_at: null } })
       })
       later(12_000, () => corrections.set(correction.id, { ...correction, applied_at: iso(Date.now()) }))
@@ -382,14 +383,17 @@ export function createMockApi(): { api: DashboardApi; simulator: Simulator } {
     async listDecisions({ device_id, status, before, limit = 50 }: DecisionQuery): Promise<DecisionPage> {
       await wait(150)
       const size = Math.min(Math.max(limit, 1), 200)
+      // The server pages by UUIDv7, which sorts by time; the mock's ids are
+      // random, so it pages by decided_at and finds the cursor's time.
+      const cursor = before ? decisions.get(before)?.decided_at : undefined
       const matching = [...decisions.values()]
         .filter((d) => (!device_id || d.device_id === device_id) && (!status || d.status === status))
-        .filter((d) => !before || d.decided_at < before)
+        .filter((d) => !cursor || d.decided_at < cursor)
         .sort((a, b) => b.decided_at.localeCompare(a.decided_at))
       const page = matching.slice(0, size)
       return {
         decisions: page.map(decisionView),
-        next_before: matching.length > size ? page[page.length - 1].decided_at : null,
+        next_before: matching.length > size ? page[page.length - 1].id : null,
       }
     },
 
