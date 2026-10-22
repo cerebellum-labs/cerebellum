@@ -20,6 +20,8 @@ export interface Decision {
   /** UUIDv7 made by the robot's agent: ids sort by when the decision was made. */
   id: UUID
   device_id: UUID
+  /** Bumped by the agent on every change it syncs. */
+  revision: number
   task: string
   options: string[]
   action_class: ActionClass
@@ -56,6 +58,8 @@ export interface Decision {
   executed_at: ISODateTime | null
   cancelled_at: ISODateTime | null
   reviewed_at: ISODateTime | null
+  /** When the robot carried out the correction, if there is one. */
+  correction_applied_at: ISODateTime | null
 }
 
 /** A review that disagreed with the device. A decision has one at most, and it shares the decision's id. */

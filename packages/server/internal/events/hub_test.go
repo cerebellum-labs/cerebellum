@@ -55,6 +55,22 @@ func TestHubDropsSlowSubscriber(t *testing.T) {
 	}
 }
 
+func TestHubListening(t *testing.T) {
+	t.Parallel()
+	var h Hub
+	if h.Listening() {
+		t.Error("listening with no subscribers")
+	}
+	_, stop := h.Subscribe()
+	if !h.Listening() {
+		t.Error("not listening with a subscriber")
+	}
+	stop()
+	if h.Listening() {
+		t.Error("listening after the last unsubscribe")
+	}
+}
+
 func TestHubUnsubscribe(t *testing.T) {
 	t.Parallel()
 	var h Hub

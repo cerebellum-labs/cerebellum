@@ -2,8 +2,6 @@ package dashboard
 
 import (
 	"context"
-	"encoding/json"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -80,24 +78,4 @@ func (h *Handler) write(ctx context.Context, conn *websocket.Conn, msg []byte) e
 	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
 	defer cancel()
 	return conn.Write(ctx, websocket.MessageText, msg)
-}
-
-type deviceEvent struct {
-	Type   string     `json:"type"`
-	Device deviceView `json:"device"`
-}
-
-// publishDevice tells the connected dashboards that a device changed.
-func (h *Handler) publishDevice(ctx context.Context, d deviceView) {
-	h.publish(ctx, deviceEvent{Type: "device.updated", Device: d})
-}
-
-func (h *Handler) publish(ctx context.Context, event any) {
-	msg, err := json.Marshal(event)
-	if err != nil {
-		// The views are plain structs; this would be a bug, not bad input.
-		h.logger.LogAttrs(ctx, slog.LevelError, "marshal dashboard event", slog.Any("error", err))
-		return
-	}
-	h.hub.Publish(msg)
 }

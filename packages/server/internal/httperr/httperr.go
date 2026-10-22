@@ -3,6 +3,7 @@
 package httperr
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -91,4 +92,19 @@ func Conflict(c *gin.Context, message string) {
 // TooManyRequests answers 429 when a client has to slow down.
 func TooManyRequests(c *gin.Context, message string) {
 	Abort(c, http.StatusTooManyRequests, CodeTooManyRequests, message)
+}
+
+// BindJSON decodes the request body into v. On failure it answers 413 or
+// 400 and returns false.
+func BindJSON(c *gin.Context, v any) bool {
+	err := c.ShouldBindJSON(v)
+	if err == nil {
+		return true
+	}
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		PayloadTooLarge(c)
+		return false
+	}
+	BadRequest(c, "the request body is not valid JSON")
+	return false
 }

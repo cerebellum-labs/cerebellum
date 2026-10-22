@@ -17,6 +17,7 @@ import (
 
 	"github.com/cerebellum-labs/cerebellum/packages/server/internal/db"
 	"github.com/cerebellum-labs/cerebellum/packages/server/internal/httperr"
+	"github.com/cerebellum-labs/cerebellum/packages/server/internal/view"
 )
 
 const (
@@ -40,7 +41,7 @@ func newToken() (token string, hash []byte) {
 }
 
 type devicesResponse struct {
-	Devices []deviceView `json:"devices"`
+	Devices []view.Device `json:"devices"`
 }
 
 func (h *Handler) listDevices(c *gin.Context) {
@@ -50,9 +51,9 @@ func (h *Handler) listDevices(c *gin.Context) {
 		return
 	}
 	now := h.now()
-	views := make([]deviceView, len(devices))
+	views := make([]view.Device, len(devices))
 	for i, d := range devices {
-		views[i] = newDeviceView(d, now)
+		views[i] = view.NewDevice(d, now)
 	}
 	c.JSON(http.StatusOK, devicesResponse{Devices: views})
 }
@@ -63,14 +64,14 @@ type createDeviceRequest struct {
 }
 
 type createDeviceResponse struct {
-	Device deviceView `json:"device"`
+	Device view.Device `json:"device"`
 	// Token is shown once; the server keeps only its hash.
 	Token string `json:"token"`
 }
 
 func (h *Handler) createDevice(c *gin.Context) {
 	var req createDeviceRequest
-	if !bindJSON(c, &req) {
+	if !httperr.BindJSON(c, &req) {
 		return
 	}
 	key := strings.TrimSpace(req.Key)
@@ -98,7 +99,7 @@ func (h *Handler) createDevice(c *gin.Context) {
 		return
 	}
 
-	view := newDeviceView(device, h.now())
+	view := view.NewDevice(device, h.now())
 	h.publishDevice(c.Request.Context(), view)
 	c.JSON(http.StatusCreated, createDeviceResponse{Device: view, Token: token})
 }
@@ -122,7 +123,7 @@ func (h *Handler) rotateToken(c *gin.Context) {
 		h.internalError(c, "rotate device token", err)
 		return
 	}
-	h.publishDevice(c.Request.Context(), newDeviceView(device, h.now()))
+	h.publishDevice(c.Request.Context(), view.NewDevice(device, h.now()))
 	c.JSON(http.StatusOK, rotateTokenResponse{Token: token})
 }
 
@@ -140,7 +141,7 @@ func (h *Handler) deleteDevice(c *gin.Context) {
 		h.internalError(c, "delete device", err)
 		return
 	}
-	h.publishDevice(c.Request.Context(), newDeviceView(device, h.now()))
+	h.publishDevice(c.Request.Context(), view.NewDevice(device, h.now()))
 	c.JSON(http.StatusOK, okResponse{OK: true})
 }
 

@@ -14,10 +14,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cerebellum-labs/cerebellum/packages/server/internal/agentapi"
 	"github.com/cerebellum-labs/cerebellum/packages/server/internal/config"
 	"github.com/cerebellum-labs/cerebellum/packages/server/internal/dashboard"
 	"github.com/cerebellum-labs/cerebellum/packages/server/internal/db"
 	"github.com/cerebellum-labs/cerebellum/packages/server/internal/events"
+	"github.com/cerebellum-labs/cerebellum/packages/server/internal/model"
+	"github.com/cerebellum-labs/cerebellum/packages/server/internal/review"
 	"github.com/cerebellum-labs/cerebellum/packages/server/internal/server"
 )
 
@@ -26,6 +29,9 @@ const (
 	// the OS takes to give up on the TCP connection.
 	connectTimeout  = 30 * time.Second
 	shutdownTimeout = 15 * time.Second
+	// A last bound on a request to the cloud model, above the per-call
+	// timeouts of /decide and the review.
+	modelHTTPTimeout = 2 * time.Minute
 )
 
 // Run connects to the database, brings its schema up to date and serves on
@@ -59,16 +65,31 @@ func run(
 		return err
 	}
 
+	q := db.New(pool)
 	hub := &events.Hub{}
-	dash := dashboard.New(db.New(pool), hub, dashboard.Config{
+	dash := dashboard.New(q, hub, dashboard.Config{
 		AdminPassword: cfg.AdminPassword,
 		SessionSecret: cfg.SessionSecret,
 		AllowedOrigin: cfg.DashboardOrigin,
 	}, logger)
 
+	cloud := model.New(model.Config{
+		BaseURL:         cfg.ModelBaseURL,
+		APIKey:          cfg.ModelAPIKey,
+		Model:           cfg.ModelID,
+		PriceInputPerM:  cfg.ModelPriceInputPerM,
+		PriceOutputPerM: cfg.ModelPriceOutputPerM,
+	}, &http.Client{Timeout: modelHTTPTimeout})
+	if !cloud.Configured() {
+		logger.WarnContext(ctx, "NEBIUS_API_KEY is not set: decisions that need the cloud model fail and nothing is reviewed")
+	}
+	reviewer := review.New(q, cloud, dash, logger)
+	agents := agentapi.New(pool, cloud, dash, reviewer, logger)
+
 	srv, err := server.New(cfg.Port, logger,
 		server.WithAllowedOrigin(cfg.DashboardOrigin),
 		server.WithRoutes(dash.Register),
+		server.WithRoutes(agents.Register),
 	)
 	if err != nil {
 		return err
@@ -93,6 +114,9 @@ func run(
 		}
 		return nil
 	})
+	if cloud.Configured() {
+		g.Go(func() error { return reviewer.Run(gctx) })
+	}
 	g.Go(func() error {
 		<-gctx.Done()
 		logger.InfoContext(gctx, "shutting down")

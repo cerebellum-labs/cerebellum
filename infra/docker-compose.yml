@@ -29,6 +29,12 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
       DASHBOARD_ORIGIN: ${DASHBOARD_ORIGIN:-}
+      # The cloud model; empty values take the server's defaults.
+      NEBIUS_API_KEY: ${NEBIUS_API_KEY:?set NEBIUS_API_KEY in .env}
+      NEBIUS_BASE_URL: ${NEBIUS_BASE_URL:-}
+      MODEL_ID: ${MODEL_ID:-}
+      MODEL_PRICE_INPUT_PER_M: ${MODEL_PRICE_INPUT_PER_M:-}
+      MODEL_PRICE_OUTPUT_PER_M: ${MODEL_PRICE_OUTPUT_PER_M:-}
     networks: [default, db]
     stop_grace_period: 20s
     depends_on:

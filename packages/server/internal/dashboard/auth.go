@@ -83,7 +83,7 @@ func (h *Handler) login(c *gin.Context) {
 		return
 	}
 	var req loginRequest
-	if !bindJSON(c, &req) {
+	if !httperr.BindJSON(c, &req) {
 		return
 	}
 	if !passwordMatches(req.Password, h.adminPassword) {

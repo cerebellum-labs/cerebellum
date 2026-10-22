@@ -5,9 +5,7 @@
 package dashboard
 
 import (
-	"errors"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"time"
 
@@ -82,21 +80,6 @@ func (h *Handler) Register(r gin.IRouter) {
 	g.GET("/frames/:id", h.frame)
 
 	g.GET("/ws", h.stream)
-}
-
-// bindJSON decodes the request body into v. On failure it answers 413 or
-// 400 and returns false.
-func bindJSON(c *gin.Context, v any) bool {
-	err := c.ShouldBindJSON(v)
-	if err == nil {
-		return true
-	}
-	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-		httperr.PayloadTooLarge(c)
-		return false
-	}
-	httperr.BadRequest(c, "the request body is not valid JSON")
-	return false
 }
 
 // internalError logs err with the request's context and answers 500,

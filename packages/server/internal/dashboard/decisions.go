@@ -11,6 +11,7 @@ import (
 
 	"github.com/cerebellum-labs/cerebellum/packages/server/internal/db"
 	"github.com/cerebellum-labs/cerebellum/packages/server/internal/httperr"
+	"github.com/cerebellum-labs/cerebellum/packages/server/internal/view"
 )
 
 const (
@@ -28,7 +29,7 @@ var statuses = map[string]bool{
 }
 
 type decisionPage struct {
-	Decisions []decisionView `json:"decisions"`
+	Decisions []view.Decision `json:"decisions"`
 	// NextBefore is the cursor of the next page, empty after the last one.
 	NextBefore *uuid.UUID `json:"next_before"`
 }
@@ -69,21 +70,21 @@ func (h *Handler) listDecisions(c *gin.Context) {
 		h.internalError(c, "list decisions", err)
 		return
 	}
-	page := decisionPage{Decisions: make([]decisionView, 0, min(len(rows), limit))}
+	page := decisionPage{Decisions: make([]view.Decision, 0, min(len(rows), limit))}
 	for i, r := range rows {
 		if i == limit {
 			next := page.Decisions[limit-1].ID
 			page.NextBefore = &next
 			break
 		}
-		page.Decisions = append(page.Decisions, newDecisionView(r))
+		page.Decisions = append(page.Decisions, view.NewDecision(r))
 	}
 	c.JSON(http.StatusOK, page)
 }
 
 type decisionResponse struct {
-	Decision    decisionView     `json:"decision"`
-	Corrections []correctionView `json:"corrections"`
+	Decision    view.Decision     `json:"decision"`
+	Corrections []view.Correction `json:"corrections"`
 }
 
 func (h *Handler) getDecision(c *gin.Context) {
@@ -102,7 +103,7 @@ func (h *Handler) getDecision(c *gin.Context) {
 	}
 	// GetDecision selects the same columns as ListDecisions.
 	r := db.ListDecisionsRow(row)
-	c.JSON(http.StatusOK, decisionResponse{Decision: newDecisionView(r), Corrections: newCorrections(r)})
+	c.JSON(http.StatusOK, decisionResponse{Decision: view.NewDecision(r), Corrections: view.NewCorrections(r)})
 }
 
 // stats counts the decisions of every device, or of device_id.
