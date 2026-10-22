@@ -20,6 +20,7 @@ Every robotics team writes its own glue between the model on the device and the 
 | [`packages/server`](packages/server) | Cloud server |
 | [`packages/dashboard`](packages/dashboard) | Web dashboard |
 | [`examples/fruit-sorter`](examples/fruit-sorter) | Demo robot on a Raspberry Pi |
+| [`infra`](infra) | Docker compose for the server behind a Cloudflare Tunnel |
 
 ## Getting started
 
