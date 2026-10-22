@@ -1,0 +1,77 @@
+name: cerebellum
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+    compress: "true"
+
+x-common: &common
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+# For images that write nothing to disk and start as a non-root user.
+x-hardened: &hardened
+  <<: *common
+  read_only: true
+  cap_drop: [ALL]
+
+services:
+  server:
+    <<: *hardened
+    image: ghcr.io/cerebellum-labs/cerebellum-server:${SERVER_TAG:-main}
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://cerebellum:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/cerebellum?sslmode=disable
+    networks: [default, db]
+    stop_grace_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # The entrypoint starts as root to set up the data directory, then switches
+  # to the postgres user, so it gets the common settings only.
+  postgres:
+    <<: *common
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: cerebellum
+      POSTGRES_DB: cerebellum
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    networks: [db]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "cerebellum", "-d", "cerebellum"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Outbound-only connection to Cloudflare. The server exposes no inbound
+  # ports; the public hostname is routed to http://server:8080 in the tunnel
+  # config.
+  cloudflared:
+    <<: *hardened
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
+    depends_on:
+      server:
+        condition: service_healthy
+
+networks:
+  # Only the server reaches the database; it has no internet access.
+  db:
+    internal: true
+
+volumes:
+  postgres-data:
