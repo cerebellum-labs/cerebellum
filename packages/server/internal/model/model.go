@@ -20,9 +20,14 @@ const (
 	systemPrompt = "You make decisions for a robot. Use the photo if there is one and the context. " +
 		"Answer the question. Reply with JSON only: " +
 		`{"action": one of the options, "confidence": number from 0 to 1, "reason": one short sentence}.`
-	// An answer is a short JSON object; the cap keeps a rambling model
-	// from running up the bill.
-	maxOutputTokens = 300
+	// Token caps, far above what was measured, since an answer cut off by
+	// the cap is lost; only the tokens actually made are paid for. Without
+	// reasoning an answer is a JSON object of about 40 tokens.
+	maxOutputTokens = 1000
+	// With reasoning on, the answer followed 300–500 tokens of thinking on
+	// simple frames. At about 230 tokens a second, the cap is half a minute
+	// of generation and 0.0072 USD at Nemotron's price.
+	maxReasoningTokens = 8000
 	// How much of an error response is kept for the log.
 	maxErrorBody = 2 << 10
 )
@@ -40,6 +45,11 @@ type Config struct {
 	Model           string
 	PriceInputPerM  float64
 	PriceOutputPerM float64
+	// Reasoning lets a reasoning model think before it answers. Measured on
+	// Nemotron 3.5 Super VL: about 1 s and 40 output tokens without it,
+	// about 2 s and 300–500 with it, and more doubt about the robot's own
+	// detector. Off, the request asks the chat template to skip it.
+	Reasoning bool
 }
 
 // Client asks the model. It is safe for concurrent use.
@@ -141,7 +151,11 @@ func (c *Client) read(call *Call, completion chatResponse, options []string) err
 	if len(completion.Choices) == 0 {
 		return fmt.Errorf("%w: no choices in the response", ErrInvalidAnswer)
 	}
-	call.Output = completion.Choices[0].Message.Content
+	choice := completion.Choices[0]
+	call.Output = choice.Message.Content
+	if call.Output == "" && choice.FinishReason == "length" {
+		return fmt.Errorf("%w: the token limit ran out before the answer, likely spent on reasoning", ErrInvalidAnswer)
+	}
 
 	ans, err := parseAnswer(call.Output)
 	if err != nil {
@@ -173,7 +187,7 @@ func (c *Client) request(q Question) chatRequest {
 		url := "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(q.Frame)
 		content = append(content, contentPart{Type: "image_url", ImageURL: &imageURL{URL: url}})
 	}
-	return chatRequest{
+	req := chatRequest{
 		Model: c.cfg.Model,
 		Messages: []message{
 			{Role: "system", Content: systemPrompt},
@@ -181,7 +195,16 @@ func (c *Client) request(q Question) chatRequest {
 		},
 		MaxTokens:   maxOutputTokens,
 		Temperature: 0,
+		// Without it the reply can break JSON, like a reason with no
+		// opening quote after the model has reasoned.
+		ResponseFormat: &responseFormat{Type: "json_object"},
 	}
+	if c.cfg.Reasoning {
+		req.MaxTokens = maxReasoningTokens
+	} else {
+		req.ChatTemplateKwargs = map[string]any{"enable_thinking": false}
+	}
+	return req
 }
 
 type answer struct {
@@ -217,10 +240,18 @@ func truncate(b []byte, n int) string {
 }
 
 type chatRequest struct {
-	Model       string    `json:"model"`
-	Messages    []message `json:"messages"`
-	MaxTokens   int       `json:"max_tokens"`
-	Temperature float64   `json:"temperature"`
+	Model          string          `json:"model"`
+	Messages       []message       `json:"messages"`
+	MaxTokens      int             `json:"max_tokens"`
+	Temperature    float64         `json:"temperature"`
+	ResponseFormat *responseFormat `json:"response_format,omitempty"`
+	// Passed to the model's chat template by vLLM-based APIs like Token
+	// Factory.
+	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
+}
+
+type responseFormat struct {
+	Type string `json:"type"`
 }
 
 type message struct {
@@ -244,6 +275,7 @@ type chatResponse struct {
 		Message struct {
 			Content string `json:"content"`
 		} `json:"message"`
+		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage *struct {
 		PromptTokens     int32 `json:"prompt_tokens"`

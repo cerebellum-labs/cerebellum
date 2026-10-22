@@ -26,8 +26,9 @@ const (
 	// interval is how often the worker looks without being woken: a
 	// safety net for a wake-up lost while it was busy, and for retries.
 	interval = 30 * time.Second
-	// callTimeout bounds one call to the model.
-	callTimeout = 60 * time.Second
+	// callTimeout bounds one call to the model: room for a reply as long as
+	// the reasoning cap allows. Nobody waits on a review.
+	callTimeout = 2 * time.Minute
 )
 
 // Asker asks the cloud model.
