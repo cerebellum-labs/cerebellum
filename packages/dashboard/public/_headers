@@ -1,11 +1,13 @@
 # Response headers on Cloudflare Pages, which deploys the dashboard to
 # https://demo.cerebellumlabs.dev. The API it calls is
 # https://api.cerebellumlabs.dev: change it in connect-src and img-src when
-# the dashboard talks to another server.
+# the dashboard talks to another server. Pages injects the Cloudflare Web
+# Analytics beacon, loaded from static.cloudflareinsights.com and reporting
+# to cloudflareinsights.com.
 
 /*
   X-Robots-Tag: noindex, nofollow
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://api.cerebellumlabs.dev; font-src 'self'; connect-src 'self' https://api.cerebellumlabs.dev wss://api.cerebellumlabs.dev; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://api.cerebellumlabs.dev; font-src 'self'; connect-src 'self' https://api.cerebellumlabs.dev wss://api.cerebellumlabs.dev https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   Strict-Transport-Security: max-age=31536000
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
