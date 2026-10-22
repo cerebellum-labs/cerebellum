@@ -110,6 +110,12 @@ func TestAskRequest(t *testing.T) {
 	if got.Model != "m" || len(got.Messages) != 2 || got.Messages[0].Role != "system" {
 		t.Fatalf("request = %+v", got)
 	}
+	if got.ChatTemplateKwargs["enable_thinking"] != false || got.MaxTokens != maxOutputTokens {
+		t.Errorf("chat_template_kwargs = %v, max_tokens = %d, want reasoning off", got.ChatTemplateKwargs, got.MaxTokens)
+	}
+	if got.ResponseFormat == nil || got.ResponseFormat.Type != "json_object" {
+		t.Errorf("response_format = %v, want json_object", got.ResponseFormat)
+	}
 	parts, err := json.Marshal(got.Messages[1].Content)
 	if err != nil {
 		t.Fatal(err)
@@ -118,6 +124,18 @@ func TestAskRequest(t *testing.T) {
 		if !strings.Contains(string(parts), want) {
 			t.Errorf("user message %s lacks %s", parts, want)
 		}
+	}
+}
+
+func TestAskReasoningOn(t *testing.T) {
+	t.Parallel()
+	c, got := fakeAPI(t, http.StatusOK, `{"action":"basket"}`)
+	c.cfg.Reasoning = true
+	if _, err := c.Ask(t.Context(), question); err != nil {
+		t.Fatal(err)
+	}
+	if got.ChatTemplateKwargs != nil || got.MaxTokens != maxReasoningTokens {
+		t.Errorf("chat_template_kwargs = %v, max_tokens = %d, want reasoning on with room for it", got.ChatTemplateKwargs, got.MaxTokens)
 	}
 }
 

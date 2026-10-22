@@ -180,7 +180,7 @@ Asks the cloud model for irreversible decisions, the ones only the server may ma
 - The items are answered in parallel. Each comes back either in `decisions` or in `errors`, in any order: match them by `id`.
 - The model gets the prompt, the options, `metadata` as context and the frame. A reply that isn't one of the options is asked again once; every call, failed ones included, counts toward the dashboard's cost.
 - **Retrying is safe.** A decision is asked once: if the agent stops waiting and sends it again, the second request waits for the call already running and gets its answer, and an answered decision comes back at once without a new call.
-- An answer usually takes 2–10 s; the server gives a call up to 60 s.
+- An answer takes about 1–2 s with Nemotron 3.5 Super VL; the server gives a call up to 60 s.
 
 ## POST /api/v1/sync
 
@@ -235,7 +235,7 @@ Hands over every other change and brings back corrections. It is also the device
 
 - `decisions` are the synced ones in the server's version; an older `revision` than the server's comes back as the server has it.
 - `corrections` are all of the device's corrections not carried out yet, in every sync until they are. A decision has one correction at most, and it shares the decision's id.
-- A decision with `needs_review` is reviewed in the background, usually within seconds. If the cloud model disagrees, the decision becomes `corrected` and its correction shows up in the next syncs.
+- A decision with `needs_review` is reviewed in the background, usually within a few seconds. The review lets the model reason about the frame, so it is slower and more careful than `/decide`. If the cloud model disagrees, the decision becomes `corrected` and its correction shows up in the next syncs.
 - **To mark a correction carried out,** send the decision again with `correction_applied_at` and a higher `revision`.
 
 ## The agent's loop

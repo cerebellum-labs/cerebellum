@@ -31,7 +31,7 @@ const (
 	shutdownTimeout = 15 * time.Second
 	// A last bound on a request to the cloud model, above the per-call
 	// timeouts of /decide and the review.
-	modelHTTPTimeout = 2 * time.Minute
+	modelHTTPTimeout = 3 * time.Minute
 )
 
 // Run connects to the database, brings its schema up to date and serves on
@@ -73,18 +73,24 @@ func run(
 		AllowedOrigin: cfg.DashboardOrigin,
 	}, logger)
 
-	cloud := model.New(model.Config{
+	modelCfg := model.Config{
 		BaseURL:         cfg.ModelBaseURL,
 		APIKey:          cfg.ModelAPIKey,
 		Model:           cfg.ModelID,
 		PriceInputPerM:  cfg.ModelPriceInputPerM,
 		PriceOutputPerM: cfg.ModelPriceOutputPerM,
-	}, &http.Client{Timeout: modelHTTPTimeout})
-	if !cloud.Configured() {
+	}
+	modelHTTP := &http.Client{Timeout: modelHTTPTimeout}
+	// The robot waits on /decide, so it gets the fast answer. Nobody waits
+	// on a review, whose point is a closer look at the frame: it reasons.
+	decider := model.New(modelCfg, modelHTTP)
+	modelCfg.Reasoning = true
+	reviewerModel := model.New(modelCfg, modelHTTP)
+	if !decider.Configured() {
 		logger.WarnContext(ctx, "NEBIUS_API_KEY is not set: decisions that need the cloud model fail and nothing is reviewed")
 	}
-	reviewer := review.New(q, cloud, dash, logger)
-	agents := agentapi.New(pool, cloud, dash, reviewer, logger)
+	reviewer := review.New(q, reviewerModel, dash, logger)
+	agents := agentapi.New(pool, decider, dash, reviewer, logger)
 
 	srv, err := server.New(cfg.Port, logger,
 		server.WithAllowedOrigin(cfg.DashboardOrigin),
@@ -114,7 +120,7 @@ func run(
 		}
 		return nil
 	})
-	if cloud.Configured() {
+	if reviewerModel.Configured() {
 		g.Go(func() error { return reviewer.Run(gctx) })
 	}
 	g.Go(func() error {
