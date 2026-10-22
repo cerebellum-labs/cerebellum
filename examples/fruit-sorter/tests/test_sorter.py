@@ -253,7 +253,7 @@ def test_the_crop_is_around_the_item_and_small_enough():
     jpeg = rig.agent.kwargs("decide")["frame"]
     image = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
     h, w = image.shape[:2]
-    assert 100 < w < 640 and 100 < h < 480
+    assert 300 <= w < 640 and 300 <= h < 480  # the item with room around it, not a close-up
 
 
 def test_nothing_happens_while_the_camera_warms_up():
@@ -280,3 +280,66 @@ def test_a_failing_agent_doesnt_stop_the_reflex(rig: Rig):
     rig.show("empty", 1.2)
     rig.show("person", 0.5)
     assert rig.lit("red") and rig.sorter.person_present
+
+
+def test_something_left_in_the_zone_becomes_part_of_the_scene_so_the_next_item_counts(rig: Rig):
+    rig.show("empty", 1.2)
+    rig.show("orange", 1.0)
+    assert rig.agent.names().count("decide") == 1
+    rig.show("orange", 8.0)  # left there for good; the zone never looks empty
+    rig.show("cup", 1.5)  # something new on top of it
+    assert rig.agent.names().count("decide") == 2
+    assert rig.agent.kwargs("decide")["proposed_action"] in ("basket", "discard")
+
+
+def test_an_item_waited_on_is_never_absorbed_however_long_the_wait(rig: Rig):
+    rig.agent.online = False
+    rig.show("empty", 1.2)
+    rig.show("cup", 1.0)
+    assert rig.sorter.pending is not None
+    rig.show("cup", 12.0)  # offline for far longer than settle_s
+    assert rig.sorter.pending is not None and "cancel" not in rig.agent.names()
+
+
+def test_taking_away_what_was_left_in_the_zone_doesnt_start_a_task(rig: Rig):
+    rig.show("empty", 1.2)
+    rig.show("orange", 1.0)
+    rig.show("orange", 8.0)  # absorbed into the scene, the zone looks empty again
+    rig.show("empty", 3.0)  # and it is taken away: only its hole is left
+    assert rig.agent.names().count("decide") == 1
+    rig.show("cup", 1.2)  # a real item afterwards is handled
+    assert rig.agent.names().count("decide") == 2
+
+
+def test_a_different_item_in_the_same_place_is_a_new_task_without_the_zone_being_empty(rig: Rig):
+    rig.show("empty", 1.2)
+    rig.show("orange", 1.0)
+    assert rig.agent.names().count("decide") == 1
+    rig.show("kiwi", 1.0)  # the orange is taken away and a kiwi put down in one move: the zone never empties
+    assert rig.agent.names().count("decide") == 2
+    assert rig.agent.calls[-1][2]["proposed_action"] == "discard"
+
+
+def test_the_same_item_staying_put_is_not_a_new_task(rig: Rig):
+    rig.show("empty", 1.2)
+    rig.show("cup", 1.0)
+    rig.answer(decision(action="discard", action_class="irreversible"))
+    rig.show("cup", 5.0)
+    assert rig.agent.names().count("decide") == 1
+
+
+def test_replacing_the_item_asked_about_drops_the_wait_and_asks_about_the_new_one(rig: Rig):
+    rig.show("empty", 1.2)
+    rig.show("cup", 1.0)
+    assert rig.sorter.pending is not None
+    rig.show("kiwi", 1.0)
+    assert "cancel" in rig.agent.names() and rig.agent.names().count("decide") == 2
+
+
+def test_the_shadow_of_a_person_beside_the_platform_is_not_an_item(rig: Rig):
+    rig.show("empty", 1.2)
+    rig.show("shadow", 3.0)
+    assert rig.agent.names() == []
+    rig.show("empty", 1.0)
+    rig.show("orange", 1.0)  # a real item afterwards is handled as usual
+    assert rig.agent.names().count("decide") == 1

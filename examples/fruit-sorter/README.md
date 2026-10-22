@@ -14,8 +14,8 @@ A demo robot on a Raspberry Pi that uses Cerebellum. A camera looks at a platfor
 How it decides, with the [Cerebellum agent](../../packages/agent):
 
 1. The detector (YOLOX-Nano, trained on COCO) finds people and labels items. A person is a **reflex**: stop at once, one journal entry per appearance.
-2. Whether something is in the zone is decided without the detector, by comparing with the empty platform, so a kiwi that COCO doesn't know still counts. An item that sits still for half a second becomes one task; the next one starts after the zone has been empty.
-3. `orange`, `apple` and `banana` are proposed as `basket`, which is **reversible**: the agent accepts it on the spot, and the server reviews it later if the detector was below 0.8 sure. Everything else is proposed as `discard`, which is **irreversible**: only the server decides, the yellow light shows the wait, and without a network it keeps waiting.
+2. Whether something is in the zone is decided without the detector, by comparing with the empty platform, so a kiwi that COCO doesn't know still counts. An item that sits still for half a second becomes one task. Put it inside the zone: a shadow or an arm reaching in from the side touches the zone's edge, is long and thin, and is not taken for an item (neither is a light change that covers the whole zone). The next one starts after the zone has been empty, or when a different item takes the place of the one handled.
+3. `orange`, `apple` and `banana` are proposed as `basket`, which is **reversible**: the agent accepts it on the spot, and the server reviews it later if the detector was below 0.9 sure. Everything else is proposed as `discard`, which is **irreversible**: only the server decides, the yellow light shows the wait, and without a network it keeps waiting.
 
 ## Run
 

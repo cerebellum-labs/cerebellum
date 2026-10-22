@@ -87,6 +87,7 @@ class Sorter:
         self._empty_since: float | None = None
         self._item: Item | None = None
         self._item_since: float | None = None
+        self._handled: tuple[tuple[int, int, int, int], np.ndarray, float] | None = None  # box, picture, brightness
         self._frames_seen = 0
 
     def attach(self) -> None:
@@ -165,8 +166,10 @@ class Sorter:
             self._item = self._item_since = None
             if self._empty_since is None:
                 self._empty_since = now
-            if now - self._empty_since >= self.cfg.leave_s:
+            if now - self._empty_since >= self.cfg.leave_s and not self._armed:
                 self._armed = True
+                self._handled = None
+                log.info("the zone is empty: ready for the next item")
             if self.pending is not None:
                 self._item_left()
             return
@@ -176,9 +179,34 @@ class Sorter:
         if self._item is None or self._item_since is None or _iou(self._item.box, item.box) < 0.6:
             self._item_since = now
         self._item = item
-        if self._armed and self.pending is None and now - self._item_since >= self.cfg.dwell_s:
+        still_for = now - self._item_since
+        # A new item: after the zone was empty, or, if something else has taken the place of the one handled
+        # (swapped without the zone ever being empty), when that has sat still as long.
+        new = still_for >= self.cfg.dwell_s and (self._armed or self._differs_from_handled(frame, item))
+        if new and self.pending is not None and not self._armed:
+            log.info("the item asked about was replaced: not waiting for its answer")
+            self._item_left()
+        if new and self.pending is None:
             self._armed = False
             self._new_task(frame, item, detections, latency_ms, now)
+        elif not new and not self._armed and self.pending is None and still_for >= self.cfg.settle_s:
+            # Handled, and it stays: it belongs to the scene now. Never while an answer is awaited: offline, an
+            # item may sit there for minutes, and the decision is still wanted.
+            log.info("something has sat in the zone for %.0fs: taking it for part of the scene", self.cfg.settle_s)
+            self.presence.absorb()
+            self._item = self._item_since = None
+
+    def _differs_from_handled(self, frame: np.ndarray, item: Item) -> bool:
+        if self._handled is None:
+            return False
+        box, picture, brightness = self._handled
+        if _iou(box, item.box) < self.cfg.swap_iou:
+            return True
+        now_picture, now_brightness = _picture(frame, item.box)
+        return (
+            float(np.abs(now_picture - picture).mean()) > self.cfg.swap_diff
+            or abs(now_brightness - brightness) > self.cfg.swap_brightness
+        )
 
     def _item_left(self) -> None:
         """The item went away while the server was still thinking."""
@@ -212,6 +240,8 @@ class Sorter:
                 "crop": rect,
             },
         )
+        picture, brightness = _picture(frame, item.box)
+        self._handled = (item.box, picture, brightness)
         log.info("new item: %s -> %s (%s)", guess.label if guess else "unknown", proposed, decision.status)
         if decision.status == "waiting_for_server":
             self.pending = decision
@@ -294,6 +324,16 @@ class Sorter:
             self.agent.mark_correction_applied(self._corrections.popleft().id)
             if not self._corrections:
                 self.lights.set("white", "off")
+
+
+def _picture(frame: np.ndarray, box: tuple[int, int, int, int]) -> tuple[np.ndarray, float]:
+    """A small grey picture of the item with its brightness taken off, and the brightness: enough to tell one
+    thing from another sitting in the same place."""
+    x0, y0, x1, y1 = box
+    grey = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY)
+    small = cv2.resize(grey, (32, 32), interpolation=cv2.INTER_AREA).astype(np.float32)
+    brightness = float(small.mean())
+    return small - brightness, brightness
 
 
 def _iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
