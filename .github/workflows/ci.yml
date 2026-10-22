@@ -42,6 +42,8 @@ jobs:
       server: ${{ steps.changes.outputs.server }}
       server-image: ${{ steps.changes.outputs.server-image }}
       dashboard: ${{ steps.changes.outputs.dashboard }}
+      agent: ${{ steps.changes.outputs.agent }}
+      fruit-sorter: ${{ steps.changes.outputs.fruit-sorter }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -98,10 +100,26 @@ jobs:
     permissions:
       contents: read
 
+  agent:
+    name: Agent
+    needs: changes
+    if: needs.changes.outputs.agent != 'false'
+    uses: ./.github/workflows/agent.yml
+    permissions:
+      contents: read
+
+  fruit-sorter:
+    name: Fruit sorter
+    needs: changes
+    if: needs.changes.outputs.fruit-sorter != 'false'
+    uses: ./.github/workflows/fruit-sorter.yml
+    permissions:
+      contents: read
+
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [changes, server, dashboard]
+    needs: [changes, server, dashboard, agent, fruit-sorter]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}

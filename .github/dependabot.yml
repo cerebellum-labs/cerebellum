@@ -42,6 +42,31 @@ updates:
     commit-message:
       prefix: build(server)
 
+  # Read uv.lock.
+  - package-ecosystem: uv
+    directory: /packages/agent
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      python:
+        patterns: ['*']
+    commit-message:
+      prefix: build(agent)
+
+  - package-ecosystem: uv
+    directory: /examples/fruit-sorter
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      python:
+        patterns: ['*']
+    commit-message:
+      prefix: build(fruit-sorter)
+
   # Reads pnpm-lock.yaml; React, Vite and the shadcn dependencies alike.
   - package-ecosystem: npm
     directory: /packages/dashboard
