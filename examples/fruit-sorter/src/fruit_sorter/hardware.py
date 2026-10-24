@@ -109,6 +109,9 @@ class ServoActuator:
         self._angles = {"basket": left, "discard": right}
         self._rest = rest
         self._busy = threading.Lock()
+        # Once at rest the lever needs no signal; a steady one makes the servo jitter.
+        time.sleep(0.5)
+        self._servo.detach()
 
     def sweep(self, action: str) -> None:
         # In a thread: the robot must keep looking for a hand while the lever moves.
