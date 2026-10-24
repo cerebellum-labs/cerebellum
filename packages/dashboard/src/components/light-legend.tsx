@@ -51,7 +51,10 @@ export function StatusLine({
   className?: string
 }) {
   const light = LIGHT[ledOf(decision)]
-  const text = `${STATUS_LABEL[decision.status]} · ${light.lit}: ${light.meaning.charAt(0).toLowerCase()}${light.meaning.slice(1)}`
+  const meaning = `${light.lit}: ${light.meaning.charAt(0).toLowerCase()}${light.meaning.slice(1)}`
+  // The outcome above already says "asking the cloud" or "cancelled".
+  const said = decision.status === 'waiting_for_server' || decision.status === 'cancelled'
+  const text = said ? meaning : `${STATUS_LABEL[decision.status]} · ${meaning}`
   return (
     <p className={cn('text-sm text-muted-foreground', className)} title={text}>
       {text}
@@ -61,7 +64,7 @@ export function StatusLine({
 
 function Kbd({ children }: { children: string }) {
   return (
-    <kbd className="readout inline-flex min-w-5 items-center justify-center rounded-[4px] border border-border-strong px-1 text-[11px] leading-4 text-foreground">
+    <kbd className="readout inline-flex min-w-5 items-center justify-center rounded-[4px] border border-border-strong px-1 text-xs leading-4 text-foreground">
       {children}
     </kbd>
   )

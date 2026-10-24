@@ -14,7 +14,9 @@ export default defineConfig({
     // In development the page and the API share this origin: /api goes to
     // the server (make db run in packages/server), the WebSocket included.
     proxy: {
-      '/api': { target: process.env.API_PROXY_TARGET ?? 'http://localhost:8080', ws: true },
+      // changeOrigin sends the target's own Host, so a deployed API behind
+      // Cloudflare answers too.
+      '/api': { target: process.env.API_PROXY_TARGET ?? 'http://localhost:8080', ws: true, changeOrigin: true },
     },
   },
 })

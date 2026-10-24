@@ -14,6 +14,7 @@ import type {
   DecisionQuery,
   DecisionView,
   DeviceView,
+  ModelCall,
   Stats,
   UUID,
 } from '../types'
@@ -34,6 +35,8 @@ interface DeviceRecord {
 const ONLINE_WINDOW_MS = 15_000
 const ADMIN_KEY = 'cerebellum.mock.admin'
 const MINUTE = 60_000
+/** A review lets the model reason, so it writes more than an answer. */
+const REVIEW_COST_USD = 0.0009
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 const iso = (ms: number) => new Date(ms).toISOString()
@@ -134,7 +137,53 @@ export function createMockApi(): { api: DashboardApi; simulator: Simulator } {
       device_name: device?.name ?? 'Unknown device',
       has_frame: frames.has(d.id),
       corrected_action: latestCorrection(d.id)?.action ?? null,
+      cloud_cost_usd: (d.cost_usd ?? 0) + (d.reviewed_at ? REVIEW_COST_USD : 0),
     }
+  }
+
+  /** The calls the server would have logged: the answer of a server decision, the review of an uncertain one. */
+  function callsOf(d: Decision): ModelCall[] {
+    const calls: ModelCall[] = []
+    const reply = (action: string, confidence: number, reason: string) =>
+      JSON.stringify({ action, confidence, reason })
+    if (d.source === 'server' && d.action && d.answered_at) {
+      calls.push({
+        id: newId(),
+        purpose: 'decide',
+        model: d.model ?? '',
+        action: d.action,
+        confidence: d.confidence,
+        reason: d.reason,
+        output: reply(d.action, d.confidence ?? 0, d.reason ?? ''),
+        error: null,
+        latency_ms: d.latency_ms ?? 0,
+        input_tokens: d.input_tokens,
+        output_tokens: d.output_tokens,
+        cost_usd: d.cost_usd ?? 0,
+        created_at: d.answered_at,
+      })
+    }
+    const correction = latestCorrection(d.id)
+    if (d.reviewed_at) {
+      const action = correction?.action ?? d.action ?? ''
+      const reason = correction?.reason ?? 'Agrees with the robot.'
+      calls.push({
+        id: newId(),
+        purpose: 'review',
+        model: correction?.model ?? 'nvidia/Nemotron-3.5-Super-VL',
+        action,
+        confidence: 0.9,
+        reason,
+        output: reply(action, 0.9, reason),
+        error: null,
+        latency_ms: 6_400,
+        input_tokens: 1_210,
+        output_tokens: 590,
+        cost_usd: REVIEW_COST_USD,
+        created_at: d.reviewed_at,
+      })
+    }
+    return calls
   }
 
   function latestCorrection(decisionId: UUID): Correction | undefined {
@@ -416,6 +465,7 @@ export function createMockApi(): { api: DashboardApi; simulator: Simulator } {
       return {
         decision: decisionView(decision),
         corrections: [...corrections.values()].filter((c) => c.decision_id === id),
+        calls: callsOf(decision),
       }
     },
 
@@ -457,6 +507,7 @@ export function createMockApi(): { api: DashboardApi; simulator: Simulator } {
       const frame = frames.get(decisionId)
       return frame ? frameDataUrl(frame.item, frame.bbox, frame.label) : ''
     },
+    decisionUrl: () => null,
 
     subscribe(listener) {
       listeners.add(listener)

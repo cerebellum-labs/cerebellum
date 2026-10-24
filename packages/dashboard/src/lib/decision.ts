@@ -35,7 +35,7 @@ export const CLOUD_PROVIDER = 'Nebius'
 export const LIGHT: Record<LedColor, { name: string; lit: string; meaning: string }> = {
   green: { name: 'Basket', lit: 'Green light', meaning: 'A fruit, put in the basket' },
   blue: { name: 'Discard', lit: 'Blue light', meaning: 'Not a fruit, thrown out' },
-  red: { name: 'Stop', lit: 'Red light', meaning: 'A hand in the zone, the robot froze' },
+  red: { name: 'Stop', lit: 'Red light', meaning: 'A person in the zone, the robot froze' },
   amber: { name: 'Waiting', lit: 'Yellow light', meaning: 'Not sure, asked the cloud model' },
   white: { name: 'Corrected', lit: 'White light', meaning: 'The cloud model fixed a decision' },
   off: { name: 'Cancelled', lit: 'No light', meaning: 'The item left before the answer' },

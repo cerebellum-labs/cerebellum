@@ -90,6 +90,8 @@ func (h *Handler) listDecisions(c *gin.Context) {
 type decisionResponse struct {
 	Decision    view.Decision     `json:"decision"`
 	Corrections []view.Correction `json:"corrections"`
+	// Calls is the decision's log of the cloud model, oldest first.
+	Calls []view.ModelCall `json:"calls"`
 }
 
 func (h *Handler) getDecision(c *gin.Context) {
@@ -106,9 +108,18 @@ func (h *Handler) getDecision(c *gin.Context) {
 		h.internalError(c, "get decision", err)
 		return
 	}
+	calls, err := h.q.ListModelCalls(c.Request.Context(), id)
+	if err != nil {
+		h.internalError(c, "list model calls", err)
+		return
+	}
 	// GetDecision selects the same columns as ListDecisions.
 	r := db.ListDecisionsRow(row)
-	c.JSON(http.StatusOK, decisionResponse{Decision: view.NewDecision(r), Corrections: view.NewCorrections(r)})
+	c.JSON(http.StatusOK, decisionResponse{
+		Decision:    view.NewDecision(r),
+		Corrections: view.NewCorrections(r),
+		Calls:       view.NewModelCalls(calls),
+	})
 }
 
 // stats counts the decisions of every device, or of device_id.

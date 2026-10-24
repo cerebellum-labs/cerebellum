@@ -86,21 +86,24 @@ type Decision struct {
 	// The model behind the final action: the local one for a device
 	// decision, the cloud one for a server decision. LatencyMs is how long
 	// that model took.
-	Model        *string  `json:"model"`
-	Confidence   *float32 `json:"confidence"`
-	Reason       *string  `json:"reason"`
-	LatencyMs    *int32   `json:"latency_ms"`
-	CostUsd      *float64 `json:"cost_usd"`
-	InputTokens  *int32   `json:"input_tokens"`
-	OutputTokens *int32   `json:"output_tokens"`
-	CancelReason *string  `json:"cancel_reason"`
-	HasFrame     bool     `json:"has_frame"`
-	DecidedAt    Time     `json:"decided_at"`
-	ReceivedAt   Time     `json:"received_at"`
-	AnsweredAt   *Time    `json:"answered_at"`
-	ExecutedAt   *Time    `json:"executed_at"`
-	CancelledAt  *Time    `json:"cancelled_at"`
-	ReviewedAt   *Time    `json:"reviewed_at"`
+	Model      *string  `json:"model"`
+	Confidence *float32 `json:"confidence"`
+	Reason     *string  `json:"reason"`
+	LatencyMs  *int32   `json:"latency_ms"`
+	CostUsd    *float64 `json:"cost_usd"`
+	// CloudCostUsd is all the decision cost in the cloud: its calls with
+	// retries and failures, and the review of an uncertain one.
+	CloudCostUsd float64 `json:"cloud_cost_usd"`
+	InputTokens  *int32  `json:"input_tokens"`
+	OutputTokens *int32  `json:"output_tokens"`
+	CancelReason *string `json:"cancel_reason"`
+	HasFrame     bool    `json:"has_frame"`
+	DecidedAt    Time    `json:"decided_at"`
+	ReceivedAt   Time    `json:"received_at"`
+	AnsweredAt   *Time   `json:"answered_at"`
+	ExecutedAt   *Time   `json:"executed_at"`
+	CancelledAt  *Time   `json:"cancelled_at"`
+	ReviewedAt   *Time   `json:"reviewed_at"`
 	// When the robot carried out the correction, if there is one.
 	CorrectionAppliedAt *Time `json:"correction_applied_at"`
 }
@@ -131,6 +134,7 @@ func NewDecision(r db.ListDecisionsRow) Decision {
 		LocalLatencyMs:      d.LocalLatencyMs,
 		CancelReason:        d.CancelReason,
 		HasFrame:            r.HasFrame,
+		CloudCostUsd:        r.CloudCostUsd,
 		DecidedAt:           Time(d.DecidedAt),
 		ReceivedAt:          Time(d.ReceivedAt),
 		ExecutedAt:          TimePtr(d.ExecutedAt),
@@ -188,6 +192,48 @@ func NewCorrection(decisionID uuid.UUID, action string, reason, model *string, r
 		CreatedAt:  Time(reviewedAt),
 		AppliedAt:  TimePtr(appliedAt),
 	}
+}
+
+// ModelCall is one call the server made to the cloud model for a decision,
+// as it happened: the raw reply, or the error of a call that failed.
+type ModelCall struct {
+	ID uuid.UUID `json:"id"`
+	// Purpose is decide, for an irreversible decision, or review.
+	Purpose      string   `json:"purpose"`
+	Model        string   `json:"model"`
+	Action       *string  `json:"action"`
+	Confidence   *float32 `json:"confidence"`
+	Reason       *string  `json:"reason"`
+	Output       *string  `json:"output"`
+	Error        *string  `json:"error"`
+	LatencyMs    int32    `json:"latency_ms"`
+	InputTokens  *int32   `json:"input_tokens"`
+	OutputTokens *int32   `json:"output_tokens"`
+	CostUsd      float64  `json:"cost_usd"`
+	CreatedAt    Time     `json:"created_at"`
+}
+
+// NewModelCalls returns the views of a decision's calls, in their order.
+func NewModelCalls(rows []db.ListModelCallsRow) []ModelCall {
+	calls := make([]ModelCall, len(rows))
+	for i, r := range rows {
+		calls[i] = ModelCall{
+			ID:           r.ID,
+			Purpose:      r.Purpose,
+			Model:        r.Model,
+			Action:       r.Action,
+			Confidence:   r.Confidence,
+			Reason:       r.Reason,
+			Output:       r.Output,
+			Error:        r.Error,
+			LatencyMs:    r.LatencyMs,
+			InputTokens:  r.InputTokens,
+			OutputTokens: r.OutputTokens,
+			CostUsd:      r.CostUsd,
+			CreatedAt:    Time(r.CreatedAt),
+		}
+	}
+	return calls
 }
 
 func deref(s *string) string {

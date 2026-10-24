@@ -32,17 +32,36 @@ export function day(iso: string): string {
   return dayOnly.format(new Date(iso))
 }
 
+/** The local calendar day of a moment: "Today", "Yesterday" or "Oct 22". */
+export function dayName(iso: string, now = Date.now()): string {
+  const start = (t: number) => new Date(t).setHours(0, 0, 0, 0)
+  const days = Math.round((start(now) - start(Date.parse(iso))) / 86_400_000)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  return day(iso)
+}
+
 export function fullTime(iso: string): string {
   return dateTime.format(new Date(iso))
 }
 
-/** "36 ms", "1.8 s". */
+/**
+ * "36 ms", "1.8 s", "4 min 12 s", "1 hr 32 min", "3 d 5 hr": the two largest
+ * units, and seconds only while they still matter (under ten minutes).
+ */
 export function duration(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)} ms`
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`
-  const minutes = Math.floor(ms / 60_000)
-  const seconds = Math.round((ms % 60_000) / 1000)
-  return seconds ? `${minutes} min ${seconds} s` : `${minutes} min`
+  // Below a minute that still reads as one once rounded to tenths.
+  if (ms < 59_950) return `${(ms / 1000).toFixed(1)} s`
+  const totalSeconds = Math.round(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+  const pair = (big: number, bigUnit: string, small: number, smallUnit: string) =>
+    small ? `${big} ${bigUnit} ${small} ${smallUnit}` : `${big} ${bigUnit}`
+  if (days) return pair(days, 'd', hours % 24, 'hr')
+  if (hours) return pair(hours, 'hr', minutes % 60, 'min')
+  return minutes < 10 ? pair(minutes, 'min', totalSeconds % 60, 's') : `${minutes} min`
 }
 
 /** Model calls cost fractions of a cent, so small amounts keep their digits. */

@@ -13,6 +13,8 @@ All notable changes to the Cerebellum server are listed here, in the [Keep a Cha
 - Dashboard API under `/api/dashboard`: devices, the journal of decisions with frames, statistics and a WebSocket stream of changes. Changing devices takes `ADMIN_PASSWORD`; the session is a cookie signed with `SESSION_SECRET`. `DASHBOARD_ORIGIN` lets a dashboard on a host of its own call the API.
 - `local_latency_ms` in the decision the agent sends: how long the local model took. It comes back as `latency_ms` of a device decision, and the dashboard's statistics average it.
 - The journal filters by `source`, and `changed=true` keeps the decisions where the cloud disagreed with the robot.
+- `cloud_cost_usd` in every decision: all it cost in the cloud, retries, failed calls and the review included.
+- A decision's detail in the dashboard API lists every call made to the cloud model for it, with the raw reply or the error.
 
 ### Changed
 

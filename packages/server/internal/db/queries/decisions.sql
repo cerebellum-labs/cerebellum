@@ -18,7 +18,10 @@ SELECT sqlc.embed(d),
        mc.output_tokens AS call_output_tokens,
        mc.created_at    AS answered_at,
        rc.model         AS review_model,
-       rc.reason        AS review_reason
+       rc.reason        AS review_reason,
+       -- Everything the cloud cost for it: the decision's calls with their
+       -- retries and failures, and the review.
+       (SELECT coalesce(sum(c.cost_usd), 0) FROM model_calls c WHERE c.decision_id = d.id)::numeric AS cloud_cost_usd
 FROM decisions d
 JOIN devices dev ON dev.id = d.device_id
 LEFT JOIN model_calls mc ON mc.id = d.model_call_id
@@ -47,7 +50,10 @@ SELECT sqlc.embed(d),
        mc.output_tokens AS call_output_tokens,
        mc.created_at    AS answered_at,
        rc.model         AS review_model,
-       rc.reason        AS review_reason
+       rc.reason        AS review_reason,
+       -- Everything the cloud cost for it: the decision's calls with their
+       -- retries and failures, and the review.
+       (SELECT coalesce(sum(c.cost_usd), 0) FROM model_calls c WHERE c.decision_id = d.id)::numeric AS cloud_cost_usd
 FROM decisions d
 JOIN devices dev ON dev.id = d.device_id
 LEFT JOIN model_calls mc ON mc.id = d.model_call_id
@@ -90,3 +96,12 @@ SELECT coalesce(sum(mc.cost_usd), 0)::numeric AS cost_usd,
 FROM model_calls mc
 JOIN decisions d ON d.id = mc.decision_id
 WHERE sqlc.narg(device_id)::uuid IS NULL OR d.device_id = sqlc.narg(device_id)::uuid;
+
+-- name: ListModelCalls :many
+-- ListModelCalls returns every call the server made for a decision, oldest
+-- first, failed ones and retries included: its log of the cloud model.
+SELECT id, purpose, model, action, confidence, reason, output, error,
+       latency_ms, input_tokens, output_tokens, cost_usd, created_at
+FROM model_calls
+WHERE decision_id = $1
+ORDER BY id;

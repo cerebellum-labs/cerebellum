@@ -122,6 +122,7 @@ The agent's fields come back as stored, plus what the server knows:
 | `latency_ms` | integer or null | How long that model took: `local_latency_ms` for a device decision, the cloud call for a server one |
 | `input_tokens`, `output_tokens` | integer or null | The cloud call of a server decision |
 | `cost_usd` | number or null | Its cost |
+| `cloud_cost_usd` | number | Everything the decision cost in the cloud: its calls, retries and failed ones included, and the review |
 | `answered_at` | time or null | When the cloud model answered |
 | `received_at` | time | When the server first got the decision, by its clock |
 | `reviewed_at` | time or null | When the review finished |

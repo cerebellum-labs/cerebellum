@@ -88,7 +88,7 @@
     --destructive: #ff6166;
     --border: #2c2c2c;
     --border-strong: #444444;
-    --input: #444444;
+    --input: #666666;
     --ring: #ec7a3c;
     --chart-1: #ededed;
     --chart-2: #8f8f8f;
@@ -126,6 +126,11 @@
   body {
     @apply bg-background text-foreground;
     }
+  /* Links get the same clear ring as buttons, not the faint browser default. */
+  a:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
   html {
     @apply font-sans;
     }

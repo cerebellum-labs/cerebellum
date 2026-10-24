@@ -47,6 +47,11 @@ export interface Decision {
   latency_ms: number | null
   /** The cloud call of a server decision: what it cost. */
   cost_usd: number | null
+  /**
+   * Everything the decision cost in the cloud: its calls, retries and failed
+   * ones included, and the review. Missing from a server older than it.
+   */
+  cloud_cost_usd?: number
   input_tokens: number | null
   output_tokens: number | null
   /** Why the robot cancelled, like the item leaving before the answer. */
@@ -74,6 +79,33 @@ export interface Correction {
   model: string
   created_at: ISODateTime
   applied_at: ISODateTime | null
+}
+
+/** One call the server made to the cloud model for a decision, as it happened. */
+export interface ModelCall {
+  id: UUID
+  /** decide for an irreversible decision, review to check an uncertain one. */
+  purpose: 'decide' | 'review'
+  model: string
+  action: string | null
+  confidence: number | null
+  reason: string | null
+  /** The model's reply as is; null when the call failed. */
+  output: string | null
+  error: string | null
+  latency_ms: number
+  input_tokens: number | null
+  output_tokens: number | null
+  cost_usd: number
+  created_at: ISODateTime
+}
+
+/** A decision with everything about it: its correction and its log of the cloud model. */
+export interface DecisionDetail {
+  decision: DecisionView
+  corrections: Correction[]
+  /** Oldest first. Missing from a server older than it. */
+  calls?: ModelCall[]
 }
 
 export interface DeviceView {

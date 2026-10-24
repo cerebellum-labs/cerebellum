@@ -2,7 +2,7 @@
 // a cookie the page can't read, and events over one shared WebSocket.
 import type { Connection, DashboardApi } from './client'
 import { ApiError } from './errors'
-import type { Correction, DashboardEvent, DecisionPage, DecisionView, DeviceView, Stats } from './types'
+import type { DashboardEvent, DecisionDetail, DecisionPage, DeviceView, Stats } from './types'
 
 const RECONNECT_MIN_MS = 1_000
 const RECONNECT_MAX_MS = 30_000
@@ -65,13 +65,16 @@ export function createHttpApi(baseUrl: string): DashboardApi {
       return request<DecisionPage>('GET', `/decisions${qs}`)
     },
     getDecision(id) {
-      return request<{ decision: DecisionView; corrections: Correction[] }>('GET', `/decisions/${id}`)
+      return request<DecisionDetail>('GET', `/decisions/${id}`)
     },
     stats(deviceId) {
       return request<Stats>('GET', deviceId ? `/stats?device_id=${deviceId}` : '/stats')
     },
     frameUrl(decisionId) {
       return `${base}/api/dashboard/frames/${decisionId}`
+    },
+    decisionUrl(decisionId) {
+      return `${base}/api/dashboard/decisions/${decisionId}`
     },
 
     subscribe(listener) {

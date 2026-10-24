@@ -23,7 +23,8 @@ function figures(rows: DecisionView[]): Figures | null {
   const times = decided.map((d) => d.latency_ms ?? (d.source === 'device' ? 0 : cloud))
   const blended = average(times)
   const perCall = average(rows.filter((d) => d.source === 'server' && d.cost_usd).map((d) => d.cost_usd!)) ?? 0
-  const spent = rows.reduce((sum, d) => sum + (d.cost_usd ?? 0), 0)
+  // Every cloud call counts, reviews and retries included, not only answers.
+  const spent = rows.reduce((sum, d) => sum + (d.cloud_cost_usd ?? d.cost_usd ?? 0), 0)
   if (blended == null) return null
   return {
     decided: decided.length,

@@ -20,6 +20,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     const timers = new Set<number>()
     const known = new Set<string>()
     let statsPending = false
+    let decisionsPending = false
 
     const mark = (set: typeof setChanged, id: string) => {
       set((current) => new Set(current).add(id))
@@ -53,16 +54,29 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       timers.add(timer)
     }
 
+    // A sync after an outage sends a burst of events: the lists reload once
+    // for all of them, and a reload already running isn't cut short.
+    const refreshDecisions = () => {
+      if (decisionsPending) return
+      decisionsPending = true
+      const timer = window.setTimeout(() => {
+        timers.delete(timer)
+        decisionsPending = false
+        void queryClient.invalidateQueries({ queryKey: ['decisions'] }, { cancelRefetch: false })
+      }, 400)
+      timers.add(timer)
+    }
+
     const unsubscribe = api.subscribe((event) => {
       switch (event.type) {
         case 'decision.upserted':
-          void queryClient.invalidateQueries({ queryKey: ['decisions'] })
+          refreshDecisions()
           void queryClient.invalidateQueries({ queryKey: ['decision', event.decision.id] })
           markRecent(event.decision.id)
           refreshStats()
           break
         case 'correction.created':
-          void queryClient.invalidateQueries({ queryKey: ['decisions'] })
+          refreshDecisions()
           void queryClient.invalidateQueries({ queryKey: ['decision', event.correction.decision_id] })
           known.add(event.correction.decision_id)
           markRecent(event.correction.decision_id)

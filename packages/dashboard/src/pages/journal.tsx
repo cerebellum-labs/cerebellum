@@ -1,10 +1,10 @@
-import { ArrowUp, Cloud, Cpu } from '@phosphor-icons/react'
+import { Cloud, Cpu } from '@phosphor-icons/react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { useEffect, useState, type ReactNode } from 'react'
-import { useSearchParams } from 'react-router'
+import { Fragment, useEffect, useRef, type ReactNode } from 'react'
+import { useNavigate, useSearchParams } from 'react-router'
 
 import { api, type Connection } from '@/api/client'
-import type { DecisionQuery, DecisionView } from '@/api/types'
+import type { DecisionQuery, DecisionStatus, DecisionView } from '@/api/types'
 import { useLive } from '@/app/context'
 import { DecisionOutcome } from '@/components/decision-outcome'
 import { DeviceSelect } from '@/components/device-select'
@@ -18,10 +18,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useConnection } from '@/hooks/use-connection'
-import { useHeldRows } from '@/hooks/use-held-rows'
 import { useMediaQuery } from '@/hooks/use-media-query'
+import { usePageTitle } from '@/hooks/use-page-title'
 import { LIGHT, ledOf, modelName, SOURCE_LABEL, STATUS_LABEL } from '@/lib/decision'
-import { clockTime, count, duration, percent, usd } from '@/lib/format'
+import { clockTime, count, dayName, duration, percent, usd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { DecisionPanel } from './decision-panel'
 
@@ -59,7 +59,9 @@ export function JournalPage() {
   const showParam = params.get('show')
   const show = isShow(showParam) ? showParam : undefined
   const selected = params.get('decision')
-  const wide = useMediaQuery('(min-width: 1024px)')
+  // The side panel needs room: below 1280px it would squeeze the list into its narrow layout.
+  const wide = useMediaQuery('(min-width: 1280px)')
+  usePageTitle('Decision journal')
 
   const devices = useQuery({ queryKey: ['devices'], queryFn: () => api.listDevices() })
   const journal = useInfiniteQuery({
@@ -69,9 +71,11 @@ export function JournalPage() {
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_before,
   })
+  // New decisions show on top the moment they arrive: watching them come in
+  // is the point of the journal.
   const rows = journal.data?.pages.flatMap((page) => page.decisions) ?? []
 
-  function setParam(key: string, value: string | null) {
+  function setParam(key: string, value: string | null, replace = false) {
     setParams(
       (current) => {
         const next = new URLSearchParams(current)
@@ -79,19 +83,29 @@ export function JournalPage() {
         else next.delete(key)
         return next
       },
-      { replace: key === 'decision' },
+      { replace },
     )
   }
 
-  const filtered = Boolean(deviceId || show)
-  const closeDecision = () => setParam('decision', null)
+  // Opening a decision from the list is a step Back undoes, so on a phone
+  // Back closes the sheet instead of leaving the journal; moving between
+  // decisions or closing one adds no steps of its own.
+  const navigate = useNavigate()
+  const pushed = useRef(false)
+  useEffect(() => {
+    if (!selected) pushed.current = false
+  }, [selected])
+  function openDecision(id: string) {
+    if (!selected) pushed.current = true
+    setParam('decision', id, Boolean(selected))
+  }
+  function closeDecision() {
+    if (pushed.current) void navigate(-1)
+    else setParam('decision', null, true)
+  }
 
-  // New decisions arrive on top. While the reader is busy with the list
-  // (pointer over it, scrolled down, a decision open), they wait behind a
-  // count instead of moving the rows under the pointer.
-  const [pointerOver, setPointerOver] = useState(false)
-  const scrolled = useScrolledPast(160)
-  const { shown, held, release } = useHeldRows(rows, pointerOver || scrolled || Boolean(selected))
+  const filtered = Boolean(deviceId || show)
+
 
   // ↑/↓ or j/k move through the journal, Esc closes the open decision.
   useEffect(() => {
@@ -102,15 +116,19 @@ export function JournalPage() {
         return
       }
       if (e.key === 'Escape' && selected) {
-        setParam('decision', null)
+        closeDecision()
         return
       }
+      const arrow = e.key === 'ArrowDown' || e.key === 'ArrowUp'
+      // Arrows move through the list only from inside it; elsewhere they
+      // scroll the page as usual. j and k work anywhere.
+      if (arrow && !target.closest('[data-decisions]')) return
       const step = e.key === 'ArrowDown' || e.key === 'j' ? 1 : e.key === 'ArrowUp' || e.key === 'k' ? -1 : 0
-      if (!step || shown.length === 0) return
+      if (!step || rows.length === 0) return
       e.preventDefault()
-      const at = shown.findIndex((d) => d.id === selected)
-      const next = shown[at === -1 ? 0 : Math.min(Math.max(at + step, 0), shown.length - 1)]
-      setParam('decision', next.id)
+      const at = rows.findIndex((d) => d.id === selected)
+      const next = rows[at === -1 ? 0 : Math.min(Math.max(at + step, 0), rows.length - 1)]
+      openDecision(next.id)
       const row = document.getElementById(rowId(next.id))
       row?.focus({ preventScroll: true })
       row?.scrollIntoView({ block: 'nearest' })
@@ -160,29 +178,30 @@ export function JournalPage() {
           <span className="text-right">Took</span>
           <span className="hidden text-right @4xl:block">Cost</span>
         </div>
-        {held > 0 && (
-          <button
-            type="button"
-            onClick={release}
-            className="flex h-9 w-full items-center justify-center gap-1.5 border-b bg-brand/[0.07] text-sm font-medium text-foreground transition-colors hover:bg-brand/[0.12] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-          >
-            <ArrowUp className="size-4" aria-hidden />
-            {count(held)} new {held === 1 ? 'decision' : 'decisions'}
-          </button>
-        )}
         <ol className="divide-y">
-          {shown.map((d) => (
-            <DecisionRow
-              key={d.id}
-              decision={d}
-              showDevice={!deviceId && (devices.data?.length ?? 0) > 1}
-              selected={d.id === selected}
-              onSelect={() => setParam('decision', d.id)}
-            />
-          ))}
+          {rows.map((d, i) => {
+            // A row only shows the time of day: a new day starts under a name.
+            const dayOf = dayName(d.decided_at)
+            const newDay = i === 0 || dayName(rows[i - 1].decided_at) !== dayOf
+            return (
+              <Fragment key={d.id}>
+                {newDay && (
+                  <li className="bg-background/40 px-3 py-1.5 text-xs font-medium text-muted-foreground sm:px-4">
+                    {dayOf}
+                  </li>
+                )}
+                <DecisionRow
+                  decision={d}
+                  showDevice={!deviceId && (devices.data?.length ?? 0) > 1}
+                  selected={d.id === selected}
+                  onSelect={() => openDecision(d.id)}
+                />
+              </Fragment>
+            )
+          })}
         </ol>
         <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 border-t px-3 text-xs text-muted-foreground sm:px-4">
-          <span className="readout">{count(shown.length)} shown</span>
+          <span className="readout">{count(rows.length)} shown</span>
           {olderFailed ? (
             <LoadError compact what="Older decisions" onRetry={fetchOlder} className="text-xs" />
           ) : journal.hasNextPage && (
@@ -191,6 +210,7 @@ export function JournalPage() {
               size="sm"
               disabled={journal.isFetchingNextPage}
               onClick={fetchOlder}
+              className="max-sm:h-10"
             >
               {journal.isFetchingNextPage ? 'Loading…' : 'Show older'}
             </Button>
@@ -205,7 +225,7 @@ export function JournalPage() {
       <PageHeader
         id="journal-title"
         title="Decision journal"
-        description="Every decision the test robots made: what the camera saw, who decided and how long it took."
+        description="Every decision the demo robot made, live: what the camera saw, who decided and how long it took."
       >
         <DeviceSelect value={deviceId} onChange={(id) => setParam('device', id)} />
         <Select value={show ?? ALL} onValueChange={(v) => setParam('show', v === ALL ? null : v)}>
@@ -223,12 +243,11 @@ export function JournalPage() {
         </Select>
       </PageHeader>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
         <section
           aria-labelledby="decisions-title"
+          data-decisions
           className="panel @container min-w-0 overflow-clip"
-          onPointerEnter={(e) => e.pointerType === 'mouse' && setPointerOver(true)}
-          onPointerLeave={() => setPointerOver(false)}
         >
           <div className="flex h-12 items-center gap-3 border-b px-3 sm:px-4">
             <h2 id="decisions-title" className="text-sm font-medium">
@@ -345,13 +364,18 @@ function DecisionRow({
           {/* Done is most decisions: only a status that says something more
               is written out. Narrow, the time and how long it took join it. */}
           <span className="flex min-w-0 gap-x-3 truncate text-xs text-muted-foreground">
+            {/* Narrow, the Decided column is gone: an icon keeps who decided. */}
+            {d.source && (
+              <SourceIcon
+                className="size-3.5 shrink-0 self-center @2xl:hidden"
+                aria-label={SOURCE_LABEL[d.source]}
+                role="img"
+              />
+            )}
             <span className="readout shrink-0 @2xl:hidden">{clockTime(d.decided_at)}</span>
             {d.latency_ms != null && <span className="readout shrink-0 @2xl:hidden">{duration(d.latency_ms)}</span>}
-            {d.status !== 'executed' && (
-              <span className={cn('truncate', d.status === 'waiting_for_server' && 'text-led-amber')}>
-                {STATUS_LABEL[d.status]}
-              </span>
-            )}
+            {/* The outcome already says "asking the cloud" or "cancelled". */}
+            {!QUIET_STATUSES.has(d.status) && <span className="truncate">{STATUS_LABEL[d.status]}</span>}
             {/* Too narrow for both: the device gives way, the filter has it. */}
             {showDevice && <span className="hidden truncate @sm:inline">{d.device_name}</span>}
           </span>
@@ -397,18 +421,10 @@ function DecisionRow({
   )
 }
 
-const rowId = (id: string) => `decision-row-${id}`
+/** Statuses a row doesn't write out: done is most decisions, the others its outcome says. */
+const QUIET_STATUSES = new Set<DecisionStatus>(['executed', 'waiting_for_server', 'cancelled'])
 
-/** Whether the page is scrolled more than `px` down. */
-function useScrolledPast(px: number): boolean {
-  const [past, setPast] = useState(() => window.scrollY > px)
-  useEffect(() => {
-    const onScroll = () => setPast(window.scrollY > px)
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [px])
-  return past
-}
+const rowId = (id: string) => `decision-row-${id}`
 
 function JournalSkeleton() {
   return (

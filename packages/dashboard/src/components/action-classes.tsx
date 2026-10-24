@@ -39,7 +39,7 @@ const CLASSES: { key: ActionClass; icon: ReactNode; decides: string; offline: st
 // One grid for the header and the rows; on phones each row stacks, every
 // cell with its column's name.
 const ROW =
-  'grid gap-x-6 gap-y-2 px-4 sm:px-5 md:grid-cols-[minmax(0,10rem)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_5rem] md:items-center'
+  'grid gap-x-6 gap-y-2 px-4 sm:px-5 lg:grid-cols-[minmax(0,10rem)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_5rem] lg:items-center'
 
 /** The actions the robots actually took in a class, most frequent first. */
 function actionsOf(rows: DecisionView[], actionClass: ActionClass): string[] {
@@ -68,17 +68,19 @@ export function ActionClasses() {
       </div>
 
       <div role="table" aria-labelledby="rules-title" className="panel overflow-hidden">
-        <div role="row" className={cn(ROW, 'hidden h-11 border-b text-sm text-muted-foreground md:grid')}>
+        <div role="row" className={cn(ROW, 'hidden h-11 border-b text-sm text-muted-foreground lg:grid')}>
           <span role="columnheader">Class</span>
           <span role="columnheader">Who decides</span>
           <span role="columnheader">Without network</span>
-          <span role="columnheader">Actions taken</span>
+          <span role="columnheader">Outcomes in the demo</span>
           <span role="columnheader" className="text-right">
             Decisions
           </span>
         </div>
         {CLASSES.map((c) => {
-          const waiting = c.waitsOffline && !robot.online
+          // Only a network cut changes the rules; a switched-off stand doesn't.
+          const outage = !robot.online && !robot.idle
+          const waiting = c.waitsOffline && outage
           const actions = actionsOf(recent.data ?? [], c.key).slice(0, 3)
           return (
             <div role="row" key={c.key} className={cn(ROW, 'border-b py-4 last:border-b-0')}>
@@ -91,7 +93,7 @@ export function ActionClasses() {
                 label="Without network"
                 className={cn(
                   'flex items-center gap-2 transition-colors duration-500',
-                  waiting ? 'text-led-amber' : !robot.online ? 'text-led-green' : 'text-muted-foreground',
+                  waiting ? 'text-led-amber' : outage ? 'text-led-green' : 'text-muted-foreground',
                 )}
               >
                 {c.waitsOffline ? (
@@ -99,9 +101,9 @@ export function ActionClasses() {
                 ) : (
                   <Check className="size-4 shrink-0" aria-hidden />
                 )}
-                {waiting ? `${count(waitingNow)} waiting now` : !robot.online ? 'Working now' : c.offline}
+                {waiting ? `${count(waitingNow)} waiting now` : outage ? 'Working now' : c.offline}
               </Cell>
-              <Cell label="Actions taken" className="flex flex-wrap gap-1.5">
+              <Cell label="Outcomes in the demo" className="flex flex-wrap gap-1.5">
                 {recent.isPending ? (
                   <>
                     <Skeleton className="h-6 w-14 rounded-[4px]" />
@@ -117,7 +119,7 @@ export function ActionClasses() {
                   <span className="text-faint">–</span>
                 )}
               </Cell>
-              <Cell label="Decisions" className="readout text-muted-foreground md:flex md:justify-end">
+              <Cell label="Decisions" className="readout text-muted-foreground lg:flex lg:justify-end">
                 {stats.isPending ? <Skeleton className="h-4 w-8" /> : s ? count(s.by_class[c.key]) : '–'}
               </Cell>
             </div>
@@ -131,8 +133,8 @@ export function ActionClasses() {
 /** A cell of the table; on phones its column's name stands before it. */
 function Cell({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
   return (
-    <span role="cell" className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 md:block">
-      <span aria-hidden className="text-xs text-muted-foreground md:hidden">
+    <span role="cell" className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 lg:block">
+      <span className="text-xs text-muted-foreground lg:hidden">
         {label}
       </span>
       <span className={className}>{children}</span>
