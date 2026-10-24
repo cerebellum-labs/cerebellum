@@ -142,7 +142,7 @@ function SignInDialog({
               aria-describedby={error ? 'admin-password-error' : undefined}
             />
             {error && (
-              <p id="admin-password-error" className="text-sm text-destructive">
+              <p id="admin-password-error" role="alert" className="text-sm text-destructive">
                 {error}
               </p>
             )}

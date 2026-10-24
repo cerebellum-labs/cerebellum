@@ -206,6 +206,7 @@ type decisionJSON struct {
 	LatencyMs       *int32    `json:"latency_ms"`
 	Reason          *string   `json:"reason"`
 	CostUsd         *float64  `json:"cost_usd"`
+	CloudCostUsd    float64   `json:"cloud_cost_usd"`
 	CorrectedAction *string   `json:"corrected_action"`
 	HasFrame        bool      `json:"has_frame"`
 	DeviceKey       string    `json:"device_key"`
@@ -230,7 +231,14 @@ func TestJournal(t *testing.T) {
 	if page.NextBefore == nil || *page.NextBefore != ids[1] {
 		t.Fatalf("next_before = %v, want %s", page.NextBefore, ids[1])
 	}
+	// The review is part of what a decision cost in the cloud.
+	if corrected := page.Decisions[0]; corrected.CloudCostUsd != 0.0001 || corrected.CostUsd != nil {
+		t.Errorf("corrected decision cost = %v / %v, want 0.0001 / null", corrected.CloudCostUsd, corrected.CostUsd)
+	}
 	server := page.Decisions[1]
+	if server.CloudCostUsd != 0.0002 {
+		t.Errorf("server decision cloud cost = %v, want 0.0002", server.CloudCostUsd)
+	}
 	if server.Status != "decided_on_server" || server.Model == nil || *server.Model != "nemotron" ||
 		server.CostUsd == nil || *server.CostUsd != 0.0002 || server.Reason == nil || *server.Reason != "A paper cup." {
 		t.Errorf("server decision = %+v", server)
@@ -282,12 +290,25 @@ func TestJournal(t *testing.T) {
 			Reason string    `json:"reason"`
 			Model  string    `json:"model"`
 		} `json:"corrections"`
+		Calls []struct {
+			Purpose string  `json:"purpose"`
+			Model   string  `json:"model"`
+			Reason  *string `json:"reason"`
+			CostUsd float64 `json:"cost_usd"`
+		} `json:"calls"`
 	}
 	if code := api.do(http.MethodGet, "/api/dashboard/decisions/"+ids[2].String(), "", &one); code != http.StatusOK {
 		t.Fatalf("get: status %d", code)
 	}
 	if len(one.Corrections) != 1 || one.Corrections[0].ID != ids[2] || one.Corrections[0].Reason != "Not a fruit." || one.Corrections[0].Model != "nemotron" {
 		t.Errorf("corrections = %+v", one.Corrections)
+	}
+	if len(one.Calls) != 1 || one.Calls[0].Purpose != "review" || one.Calls[0].CostUsd != 0.0001 {
+		t.Errorf("calls = %+v, want the review", one.Calls)
+	}
+	api.do(http.MethodGet, "/api/dashboard/decisions/"+ids[0].String(), "", &one)
+	if one.Calls == nil || len(one.Calls) != 0 {
+		t.Errorf("device decision calls = %#v, want an empty list", one.Calls)
 	}
 	if code := api.do(http.MethodGet, "/api/dashboard/decisions/"+uuid.Must(uuid.NewV7()).String(), "", nil); code != http.StatusNotFound {
 		t.Errorf("missing decision: status %d, want 404", code)

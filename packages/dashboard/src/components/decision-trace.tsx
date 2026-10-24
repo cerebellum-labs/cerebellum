@@ -63,7 +63,11 @@ function stepsOf(d: DecisionView, corrections: Correction[], brief: boolean): St
     steps.push({
       at: Date.parse(d.answered_at ?? d.received_at),
       light: actionLight(d.action),
-      title: `Cloud model answered: ${humanize(d.action ?? '')}`,
+      // The robot gave up before the answer came: it is kept, but too late.
+      title:
+        d.cancelled_at && d.answered_at && d.answered_at > d.cancelled_at
+          ? `Cloud model answered too late: ${humanize(d.action ?? '')}`
+          : `Cloud model answered: ${humanize(d.action ?? '')}`,
       sync: true,
       detail: (
         <>

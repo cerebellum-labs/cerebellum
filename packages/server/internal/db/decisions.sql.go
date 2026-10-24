@@ -89,7 +89,10 @@ SELECT d.id, d.device_id, d.revision, d.task, d.options, d.action_class, d.propo
        mc.output_tokens AS call_output_tokens,
        mc.created_at    AS answered_at,
        rc.model         AS review_model,
-       rc.reason        AS review_reason
+       rc.reason        AS review_reason,
+       -- Everything the cloud cost for it: the decision's calls with their
+       -- retries and failures, and the review.
+       (SELECT coalesce(sum(c.cost_usd), 0) FROM model_calls c WHERE c.decision_id = d.id)::numeric AS cloud_cost_usd
 FROM decisions d
 JOIN devices dev ON dev.id = d.device_id
 LEFT JOIN model_calls mc ON mc.id = d.model_call_id
@@ -112,6 +115,7 @@ type GetDecisionRow struct {
 	AnsweredAt       *time.Time
 	ReviewModel      *string
 	ReviewReason     *string
+	CloudCostUsd     float64
 }
 
 func (q *Queries) GetDecision(ctx context.Context, id uuid.UUID) (GetDecisionRow, error) {
@@ -157,6 +161,7 @@ func (q *Queries) GetDecision(ctx context.Context, id uuid.UUID) (GetDecisionRow
 		&i.AnsweredAt,
 		&i.ReviewModel,
 		&i.ReviewReason,
+		&i.CloudCostUsd,
 	)
 	return i, err
 }
@@ -188,7 +193,10 @@ SELECT d.id, d.device_id, d.revision, d.task, d.options, d.action_class, d.propo
        mc.output_tokens AS call_output_tokens,
        mc.created_at    AS answered_at,
        rc.model         AS review_model,
-       rc.reason        AS review_reason
+       rc.reason        AS review_reason,
+       -- Everything the cloud cost for it: the decision's calls with their
+       -- retries and failures, and the review.
+       (SELECT coalesce(sum(c.cost_usd), 0) FROM model_calls c WHERE c.decision_id = d.id)::numeric AS cloud_cost_usd
 FROM decisions d
 JOIN devices dev ON dev.id = d.device_id
 LEFT JOIN model_calls mc ON mc.id = d.model_call_id
@@ -228,6 +236,7 @@ type ListDecisionsRow struct {
 	AnsweredAt       *time.Time
 	ReviewModel      *string
 	ReviewReason     *string
+	CloudCostUsd     float64
 }
 
 // ListDecisions pages through the journal, newest first: the next page
@@ -292,6 +301,67 @@ func (q *Queries) ListDecisions(ctx context.Context, arg ListDecisionsParams) ([
 			&i.AnsweredAt,
 			&i.ReviewModel,
 			&i.ReviewReason,
+			&i.CloudCostUsd,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listModelCalls = `-- name: ListModelCalls :many
+SELECT id, purpose, model, action, confidence, reason, output, error,
+       latency_ms, input_tokens, output_tokens, cost_usd, created_at
+FROM model_calls
+WHERE decision_id = $1
+ORDER BY id
+`
+
+type ListModelCallsRow struct {
+	ID           uuid.UUID
+	Purpose      string
+	Model        string
+	Action       *string
+	Confidence   *float32
+	Reason       *string
+	Output       *string
+	Error        *string
+	LatencyMs    int32
+	InputTokens  *int32
+	OutputTokens *int32
+	CostUsd      float64
+	CreatedAt    time.Time
+}
+
+// ListModelCalls returns every call the server made for a decision, oldest
+// first, failed ones and retries included: its log of the cloud model.
+func (q *Queries) ListModelCalls(ctx context.Context, decisionID uuid.UUID) ([]ListModelCallsRow, error) {
+	rows, err := q.db.Query(ctx, listModelCalls, decisionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListModelCallsRow
+	for rows.Next() {
+		var i ListModelCallsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Purpose,
+			&i.Model,
+			&i.Action,
+			&i.Confidence,
+			&i.Reason,
+			&i.Output,
+			&i.Error,
+			&i.LatencyMs,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.CostUsd,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

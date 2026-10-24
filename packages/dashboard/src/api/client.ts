@@ -2,11 +2,10 @@ import { createHttpApi } from './http'
 import { createMockApi } from './mock'
 import type {
   ActionClass,
-  Correction,
   DashboardEvent,
+  DecisionDetail,
   DecisionPage,
   DecisionQuery,
-  DecisionView,
   DeviceView,
   Stats,
   UUID,
@@ -25,9 +24,11 @@ export interface DashboardApi {
   deleteDevice(deviceId: UUID): Promise<void>
 
   listDecisions(query: DecisionQuery): Promise<DecisionPage>
-  getDecision(id: UUID): Promise<{ decision: DecisionView; corrections: Correction[] }>
+  getDecision(id: UUID): Promise<DecisionDetail>
   stats(deviceId?: UUID): Promise<Stats>
   frameUrl(decisionId: UUID): string
+  /** The decision's record on the API, to open as is; null where there is no API to open. */
+  decisionUrl(decisionId: UUID): string | null
 
   /** Server events (WebSocket /api/dashboard/ws). Returns the unsubscribe function. */
   subscribe(listener: (event: DashboardEvent) => void): () => void

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, Key, Plus, Trash } from '@phosphor-icons/react'
+import { ArrowRight, Check, Copy, Key, Plus, SignIn, Trash } from '@phosphor-icons/react'
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 
@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useNow } from '@/hooks/use-now'
+import { usePageTitle } from '@/hooks/use-page-title'
 import { day, fullTime, timeAgo } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -49,6 +50,7 @@ export function DevicesPage() {
   const admin = useAdmin()
   const queryClient = useQueryClient()
   const now = useNow()
+  usePageTitle('Robots')
   const devices = useQuery({ queryKey: ['devices'], queryFn: () => api.listDevices() })
 
   const [adding, setAdding] = useState(false)
@@ -75,6 +77,8 @@ export function DevicesPage() {
     setConfirm(null)
   }
 
+  const shownConfirm = useLastShown(confirm)
+
   const actionError = [rotate.error, remove.error].find((e) => e && !(e instanceof ApiError && e.status === 401))
 
   return (
@@ -82,11 +86,18 @@ export function DevicesPage() {
       <PageHeader
         id="devices-title"
         title="Robots"
-        description="The robots on the demo stand. Each one syncs with its own token; online means it synced in the last 15 seconds."
+        description="Every robot in a fleet syncs to this one server with its own token. Online means it synced in the last 15 seconds."
       >
-        <Button onClick={() => admin.whenSignedIn(() => setAdding(true))}>
-          <Plus /> Add robot
-        </Button>
+        {/* Visitors watch; managing robots is for the signed-in owner. */}
+        {admin.signedIn ? (
+          <Button onClick={() => setAdding(true)}>
+            <Plus /> Add robot
+          </Button>
+        ) : (
+          <Button variant="outline" onClick={admin.signIn}>
+            <SignIn /> Sign in to manage
+          </Button>
+        )}
       </PageHeader>
 
       {actionError && (
@@ -123,12 +134,11 @@ export function DevicesPage() {
                     {device.name}
                   </Link>
                   <code className="readout text-xs break-all text-muted-foreground">{device.key}</code>
-                  {/* What the agent reports about the robot, values only:
-                      "usb-640x480 · Raspberry Pi 5". */}
+                  {/* What the agent reports about the robot: "camera: usb · board: Pi 5". */}
                   {Object.keys(device.metadata).length > 0 && (
                     <p className="text-xs text-muted-foreground">
-                      {Object.values(device.metadata)
-                        .map((v) => (typeof v === 'string' ? v : JSON.stringify(v)))
+                      {Object.entries(device.metadata)
+                        .map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
                         .join('\u00a0· ')}
                     </p>
                   )}
@@ -147,23 +157,35 @@ export function DevicesPage() {
                 {/* Deleting is rare: a quiet icon that turns red on hover, not
                     a red button on every row. */}
                 <div className="flex items-center gap-1 max-lg:col-start-2 lg:justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => admin.whenSignedIn(() => setConfirm({ kind: 'rotate', device }))}
-                  >
-                    <Key /> New token
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Delete ${device.name}`}
-                    title="Delete"
-                    className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => admin.whenSignedIn(() => setConfirm({ kind: 'delete', device }))}
-                  >
-                    <Trash />
-                  </Button>
+                  {!admin.signedIn ? (
+                    <Link
+                      to={`/journal?device=${device.id}`}
+                      className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground max-sm:min-h-10"
+                    >
+                      See decisions <ArrowRight className="size-4" aria-hidden />
+                    </Link>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => admin.whenSignedIn(() => setConfirm({ kind: 'rotate', device }))}
+                      >
+                        <Key /> New token
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        // A full-size target for a finger on phones.
+                        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive max-sm:size-10"
+                        aria-label={`Delete ${device.name}`}
+                        title="Delete"
+                        onClick={() => admin.whenSignedIn(() => setConfirm({ kind: 'delete', device }))}
+                      >
+                        <Trash />
+                      </Button>
+                    </>
+                  )}
                 </div>
               </li>
             ))}
@@ -182,16 +204,16 @@ export function DevicesPage() {
 
       <AlertDialog open={Boolean(confirm)} onOpenChange={(open) => !open && setConfirm(null)}>
         <AlertDialogContent>
-          {confirm?.kind === 'rotate' ? (
+          {shownConfirm?.kind === 'rotate' ? (
             <AlertDialogHeader>
-              <AlertDialogTitle>Issue a new token for {confirm.device.name}?</AlertDialogTitle>
+              <AlertDialogTitle>Issue a new token for {shownConfirm.device.name}?</AlertDialogTitle>
               <AlertDialogDescription>
                 The current token stops working at once, so the robot goes offline until you put the new one on it.
               </AlertDialogDescription>
             </AlertDialogHeader>
           ) : (
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete {confirm?.device.name}?</AlertDialogTitle>
+              <AlertDialogTitle>Delete {shownConfirm?.device.name}?</AlertDialogTitle>
               <AlertDialogDescription>
                 Its token stops working and the robot can no longer sync. Its decisions stay in the journal.
               </AlertDialogDescription>
@@ -200,10 +222,10 @@ export function DevicesPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Keep it</AlertDialogCancel>
             <AlertDialogAction
-              variant={confirm?.kind === 'delete' ? 'destructive' : 'default'}
+              variant={shownConfirm?.kind === 'delete' ? 'destructive' : 'default'}
               onClick={() => confirm && run(confirm)}
             >
-              {confirm?.kind === 'rotate' ? 'Issue new token' : 'Delete robot'}
+              {shownConfirm?.kind === 'rotate' ? 'Issue new token' : 'Delete robot'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -319,14 +341,23 @@ const API_URL = import.meta.env.VITE_API_URL || window.location.origin
 
 function TokenDialog({ issued, onClose }: { issued: Issued | null; onClose: () => void }) {
   const [copied, setCopied] = useState(false)
-  const env = issued ? `CEREBELLUM_URL=${API_URL}\nCEREBELLUM_TOKEN=${issued.token}` : ''
+  // A browser that refuses the clipboard: the lines are there to select.
+  const [copyFailed, setCopyFailed] = useState(false)
+  const shown = useLastShown(issued)
+  const env = shown ? `CEREBELLUM_URL=${API_URL}\nCEREBELLUM_TOKEN=${shown.token}` : ''
+  const guarded = !copied && !copyFailed
 
   async function copy() {
-    await navigator.clipboard.writeText(env)
-    setCopied(true)
+    try {
+      await navigator.clipboard.writeText(env)
+      setCopied(true)
+    } catch {
+      setCopyFailed(true)
+    }
   }
   function close() {
     setCopied(false)
+    setCopyFailed(false)
     onClose()
   }
 
@@ -336,12 +367,12 @@ function TokenDialog({ issued, onClose }: { issued: Issued | null; onClose: () =
         className="sm:max-w-lg"
         // The token is shown once: a stray click or Esc must not lose it
         // before it is copied. Done and the close button still close.
-        onInteractOutside={(e) => !copied && e.preventDefault()}
-        onEscapeKeyDown={(e) => !copied && e.preventDefault()}
+        onInteractOutside={(e) => guarded && e.preventDefault()}
+        onEscapeKeyDown={(e) => guarded && e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle>
-            {issued?.isNew ? `${issued.device.name} is added` : `New token for ${issued?.device.name}`}
+            {shown?.isNew ? `${shown.device.name} is added` : `New token for ${shown?.device.name}`}
           </DialogTitle>
           <DialogDescription>
             Put these lines in the robot's <code className="readout text-foreground">.env</code> and start its agent. The
@@ -351,6 +382,11 @@ function TokenDialog({ issued, onClose }: { issued: Issued | null; onClose: () =
         <pre className="readout rounded-md border bg-background p-3 text-xs leading-relaxed break-all whitespace-pre-wrap text-foreground select-all">
           {env}
         </pre>
+        {copyFailed && (
+          <p role="alert" className="text-sm text-destructive">
+            Couldn't copy. Select the lines above and copy them yourself.
+          </p>
+        )}
         <DialogFooter className="sm:justify-between">
           {/* Copying comes first; once it's done, closing does. Copy is last
               so it sits on top on phones and on the right on wide screens. */}
@@ -365,6 +401,13 @@ function TokenDialog({ issued, onClose }: { issued: Issued | null; onClose: () =
       </DialogContent>
     </Dialog>
   )
+}
+
+/** The last value that wasn't null, so a closing dialog keeps its text while it fades out. */
+function useLastShown<T>(value: T | null): T | null {
+  const [last, setLast] = useState(value)
+  if (value !== null && value !== last) setLast(value)
+  return value ?? last
 }
 
 /** The device list's rows while it loads, in the same columns. */

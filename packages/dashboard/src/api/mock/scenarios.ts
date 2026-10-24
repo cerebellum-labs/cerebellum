@@ -63,6 +63,8 @@ function base(deviceId: UUID, at: number, item: Item, label: string, localConfid
       local_latency_ms: localConfidence == null ? null : jitter(36, 8),
       latency_ms: null,
       cost_usd: null,
+      // Filled in when the journal is read: answer plus review.
+      cloud_cost_usd: 0,
       input_tokens: null,
       output_tokens: null,
       cancel_reason: null,

@@ -1,8 +1,9 @@
-import { X } from '@phosphor-icons/react'
+import { ArrowSquareOut, X } from '@phosphor-icons/react'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 
 import { api, ApiError } from '@/api/client'
+import type { ModelCall } from '@/api/types'
 import { DecisionOutcome } from '@/components/decision-outcome'
 import { Trace, TraceSkeleton } from '@/components/decision-trace'
 import { Frame } from '@/components/frame'
@@ -11,8 +12,8 @@ import { StatusLine } from '@/components/light-legend'
 import { LoadError } from '@/components/load-error'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { CLASS_LABEL, humanize, ledOf } from '@/lib/decision'
-import { clockTime, count, fullTime, usd } from '@/lib/format'
+import { CLASS_LABEL, humanize, ledOf, modelName } from '@/lib/decision'
+import { clockTime, count, dayName, duration, fullTime, usd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 /**
@@ -54,16 +55,18 @@ export function DecisionPanel({ id, bare, onClose }: { id: string; bare?: boolea
     )
   }
 
-  const { decision: d, corrections } = query.data
+  const { decision: d, corrections, calls } = query.data
+  const recordUrl = api.decisionUrl(d.id)
   return (
     <article className={cn(box, 'animate-in duration-200 fade-in-0')} aria-labelledby={`decision-${d.id}`}>
       <div className="sticky top-0 z-10 flex h-11 items-center justify-between border-b bg-card/90 px-4 backdrop-blur">
         <p className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
           <span className="truncate text-foreground">{d.device_name}</span>
+          {dayName(d.decided_at) !== 'Today' && <span>{dayName(d.decided_at)}</span>}
           <span className="readout">{clockTime(d.decided_at)}</span>
         </p>
         {onClose && (
-          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
+          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close" className="max-lg:size-10">
             <X />
           </Button>
         )}
@@ -101,7 +104,7 @@ export function DecisionPanel({ id, bare, onClose }: { id: string; bare?: boolea
           </Field>
         </Section>
 
-        {(d.input_tokens != null || (d.cost_usd ?? 0) > 0) && (
+        {(d.input_tokens != null || (d.cloud_cost_usd ?? d.cost_usd ?? 0) > 0) && (
           <Section title="Cost">
             {d.input_tokens != null && (
               <Field label="Tokens in" mono>
@@ -113,9 +116,17 @@ export function DecisionPanel({ id, bare, onClose }: { id: string; bare?: boolea
                 {count(d.output_tokens)}
               </Field>
             )}
-            <Field label="Cost" mono>
-              {usd(d.cost_usd ?? 0)}
-            </Field>
+            {d.cost_usd != null && (
+              <Field label="Answer" mono>
+                {usd(d.cost_usd)}
+              </Field>
+            )}
+            {/* Retries, failed calls and the review come on top of the answer. */}
+            {d.cloud_cost_usd != null && d.cloud_cost_usd !== (d.cost_usd ?? 0) && (
+              <Field label={d.cost_usd == null ? 'Cloud check' : 'All cloud calls'} mono>
+                {usd(d.cloud_cost_usd)}
+              </Field>
+            )}
           </Section>
         )}
 
@@ -125,22 +136,83 @@ export function DecisionPanel({ id, bare, onClose }: { id: string; bare?: boolea
           </Section>
         )}
 
-        {Object.keys(d.metadata).length > 0 && (
-          <details className="group border-t pt-4">
-            <summary className="cursor-pointer text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
-              Metadata from the robot
-            </summary>
-            <pre className="readout mt-2.5 overflow-x-auto rounded-md border bg-background p-3 text-xs leading-relaxed text-muted-foreground">
-              {JSON.stringify(d.metadata, null, 2)}
-            </pre>
-          </details>
+        {calls && calls.length > 0 && (
+          <Section title="Cloud model log" fields={false}>
+            <ol className="grid gap-4">
+              {calls.map((c) => (
+                <li key={c.id} className="grid gap-1.5 text-xs">
+                  <p className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                    <span className="text-sm">{CALL_LABEL[c.purpose]}</span>
+                    <span className="readout text-muted-foreground">
+                      {clockTime(c.created_at)} · {duration(c.latency_ms)} · {usd(c.cost_usd)}
+                    </span>
+                  </p>
+                  <p className="text-muted-foreground">
+                    {modelName(c.model)}
+                    {c.input_tokens != null && `, ${count(c.input_tokens)} tokens in, ${count(c.output_tokens ?? 0)} out`}
+                  </p>
+                  {/* The reply exactly as the model sent it, or why the call failed. */}
+                  <pre
+                    className={cn(
+                      'readout rounded-md border bg-background p-2.5 leading-relaxed break-words whitespace-pre-wrap',
+                      c.error ? 'text-destructive' : 'text-muted-foreground',
+                    )}
+                  >
+                    {c.error ?? pretty(c.output)}
+                  </pre>
+                </li>
+              ))}
+            </ol>
+          </Section>
         )}
+
+        {/* For anyone checking the data is real: the record as the API sends
+            it, and links to open it and the frame straight from the API. */}
+        <details className="group border-t pt-4">
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+            Raw record from the API
+          </summary>
+          <div className="mt-2.5 grid gap-3">
+            {recordUrl && (
+              <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                <a href={recordUrl} target="_blank" rel="noreferrer" className={LINK}>
+                  Open as JSON <ArrowSquareOut className="size-3.5" aria-hidden />
+                </a>
+                {d.has_frame && (
+                  <a href={api.frameUrl(d.id)} target="_blank" rel="noreferrer" className={LINK}>
+                    Open the frame <ArrowSquareOut className="size-3.5" aria-hidden />
+                  </a>
+                )}
+              </p>
+            )}
+            <pre className="readout overflow-x-auto rounded-md border bg-background p-3 text-xs leading-relaxed text-muted-foreground">
+              {JSON.stringify(d, null, 2)}
+            </pre>
+          </div>
+        </details>
       </div>
     </article>
   )
 }
 
 /** A titled block; its children are Fields unless `fields` is false. */
+const CALL_LABEL: Record<ModelCall['purpose'], string> = {
+  decide: 'Asked to decide',
+  review: "Asked to check the robot's call",
+}
+
+const LINK = 'inline-flex items-center gap-1 font-medium underline-offset-4 hover:text-brand hover:underline'
+
+/** A JSON reply laid out to read; anything else as it came. */
+function pretty(output: string | null): string {
+  if (!output) return 'No reply'
+  try {
+    return JSON.stringify(JSON.parse(output), null, 2)
+  } catch {
+    return output
+  }
+}
+
 function Section({ title, fields = true, children }: { title: string; fields?: boolean; children: ReactNode }) {
   return (
     <section className="grid gap-3 border-t pt-4">

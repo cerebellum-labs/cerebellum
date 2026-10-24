@@ -33,6 +33,12 @@ export function Layout() {
 
   return (
     <div className="min-h-svh">
+      <a
+        href="#content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-brand focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-brand-foreground"
+      >
+        Skip to content
+      </a>
       <HackathonBanner />
       <header className="sticky top-0 z-20 border-b bg-background/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-3 px-4 sm:gap-6 sm:px-6">
@@ -81,11 +87,11 @@ export function Layout() {
               </Link>
             )}
             {admin.signedIn ? (
-              <Button variant="outline" size="sm" onClick={() => void admin.signOut()}>
+              <Button variant="outline" size="sm" onClick={() => void admin.signOut()} className="max-sm:size-10">
                 <SignOut /> <span className="max-sm:sr-only">Sign out</span>
               </Button>
             ) : (
-              <Button variant="outline" size="sm" onClick={admin.signIn}>
+              <Button variant="outline" size="sm" onClick={admin.signIn} className="max-sm:size-10">
                 <SignIn /> <span className="max-sm:sr-only">Sign in</span>
               </Button>
             )}
@@ -93,7 +99,7 @@ export function Layout() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 sm:py-8">
+      <main id="content" className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 sm:py-8">
         <Outlet />
       </main>
     </div>
@@ -106,7 +112,8 @@ export function Layout() {
  */
 function OfflineNotice() {
   const robot = useRobot()
-  if (robot.online) return null
+  // A switched-off stand is not news on every page: the online count says it.
+  if (robot.online || robot.idle) return null
   return (
     <div className="flex items-center gap-2">
       <span className="flex items-center gap-2 rounded-full border border-led-amber/40 bg-led-amber/[0.08] px-2.5 py-1 text-xs text-led-amber">
@@ -142,7 +149,7 @@ function HackathonBanner() {
               to a test stand, not a mock-up. */}
           <span className="font-semibold">Live demo</span>
           <span className="hidden sm:inline">
-            : the real Cerebellum dashboard, {simulator ? 'running a simulated robot' : 'connected to a test robot'}
+            : the real Cerebellum dashboard, {simulator ? 'running a simulated robot' : 'connected to a demo robot'}
           </span>
           <span className="hidden xl:inline"> · Nebius × NVIDIA Global AI Hackathon</span>
         </p>

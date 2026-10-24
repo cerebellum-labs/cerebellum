@@ -144,6 +144,8 @@ export function SystemMap() {
   const cloudModel = rows.find((d) => d.source === 'server')?.model
   const waiting = s?.by_status.waiting_for_server ?? 0
   const showSynced = synced !== null && robot.online
+  // The network is down while the robots run on; a switched-off stand is not.
+  const outage = !robot.online && !robot.idle
   // A figure still on its way holds its place instead of reading as zero; one
   // the server doesn't know (no answers yet, an agent that doesn't report
   // it) leaves its readout out rather than showing a dash.
@@ -181,6 +183,18 @@ export function SystemMap() {
             Add one
           </Link>{' '}
           and its decisions show up here.
+        </span>
+      </>
+    )
+  } else if (robot.idle) {
+    announce = 'The demo robot is switched off right now.'
+    status = (
+      <>
+        <span className="font-medium">The demo robot is switched off right now.</span>{' '}
+        <span className="text-muted-foreground">
+          {lastSeen
+            ? `Last seen ${timeAgo(lastSeen, now)}; the journal and the figures here are from its last run.`
+            : "It hasn't connected yet."}
         </span>
       </>
     )
@@ -231,8 +245,9 @@ export function SystemMap() {
             {/* What the visitor is watching: the demo robot, said once, so
                 basket, discard and stop make sense everywhere else. */}
             <p className="text-sm text-pretty text-muted-foreground">
-              {robot.simulated ? 'A simulated robot' : 'A Raspberry Pi with a camera'} sorts fruit: fruit goes in the
-              basket, anything else is thrown out. Each dot is one of its decisions on the way.
+              One example: {robot.simulated ? 'a simulated robot' : 'a Raspberry Pi with a camera'} sorts fruit. Fruit
+              goes in the basket, anything else is thrown out, and a person in view stops it. Each dot is a decision
+              on its way.
             </p>
           </div>
           {robot.simulated && (
@@ -254,10 +269,13 @@ export function SystemMap() {
           <div
             className={cn(
               'flex items-start gap-2.5 rounded-md border px-3 py-2.5 text-sm',
-              robot.online || total === 0 ? 'border-border bg-card' : 'border-led-amber/30 bg-led-amber/[0.06]',
+              !outage || total === 0 ? 'border-border bg-card' : 'border-led-amber/30 bg-led-amber/[0.06]',
             )}
           >
-            <Led color={failed || total === 0 ? 'off' : robot.online ? 'green' : 'amber'} className="mt-1.5" />
+            <Led
+              color={failed || total === 0 || robot.idle ? 'off' : robot.online ? 'green' : 'amber'}
+              className="mt-1.5"
+            />
             <div className="min-w-0">{status}</div>
           </div>
         )}
@@ -271,14 +289,15 @@ export function SystemMap() {
           <ZoneFrame column="lg:col-start-3" />
 
           <Zone>
-            <ZoneLabel className="lg:col-start-1">{total > 1 ? 'On each robot' : 'On the robot'}</ZoneLabel>
+            {/* Built for a fleet, whatever the demo stand holds today. */}
+            <ZoneLabel className="lg:col-start-1">On each robot</ZoneLabel>
             <Node
               className="lg:col-start-1 lg:row-start-2"
               icon={<VideoCamera className="size-4" />}
               title="Camera and local model"
               subtitle={localModel ?? 'Local model'}
             >
-              {ofStats('Answers in', s?.avg_latency_ms.device != null ? duration(s.avg_latency_ms.device) : null)}
+              {ofStats('Average answer', s?.avg_latency_ms.device != null ? duration(s.avg_latency_ms.device) : null)}
               {ofStats('Decides alone', decided && s ? percent(s.by_source.device / decided) : null)}
             </Node>
             <Wire className="lg:col-start-1 lg:row-start-3" label="Task and frame" comets={on('local')} onDone={drop} />
@@ -303,10 +322,10 @@ export function SystemMap() {
           <Wire
             network
             className="lg:col-start-2 lg:row-start-4"
-            label={robot.online || total === 0 ? 'Journal and requests' : 'No network'}
+            label={!outage || total === 0 ? 'Journal and requests' : 'No network'}
             comets={on('network')}
             onDone={drop}
-            broken={!robot.online && total > 0}
+            broken={outage && total > 0}
           />
 
           <Zone>
@@ -319,7 +338,7 @@ export function SystemMap() {
               brand
             >
               {ofStats('Decisions', s ? count(s.total) : null)}
-              {ofStats('Corrections', s ? count(s.corrections) : null)}
+              {ofStats('Fixed later', s ? count(s.corrections) : null)}
             </Node>
             <Wire
               flip
@@ -336,7 +355,7 @@ export function SystemMap() {
               light={waiting ? 'amber' : undefined}
               lightLabel={waiting ? `${waiting} thinking` : undefined}
             >
-              {ofStats('Answers in', s?.avg_latency_ms.server != null ? duration(s.avg_latency_ms.server) : null)}
+              {ofStats('Average answer', s?.avg_latency_ms.server != null ? duration(s.avg_latency_ms.server) : null)}
               {ofStats('Spent', s ? usd(s.cost_usd) : null)}
             </Node>
             <ZoneNote className="lg:col-start-3">
@@ -434,7 +453,7 @@ function Node({
         </span>
         <div className="grid min-w-0 flex-1 gap-0.5">
           <h3 className="truncate text-sm font-medium">{title}</h3>
-          <p className="truncate text-sm text-muted-foreground">{subtitle}</p>
+          <p className="line-clamp-2 text-sm text-muted-foreground">{subtitle}</p>
         </div>
         {light && (
           <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">

@@ -1,4 +1,4 @@
-import { ArrowRight, Cloud, Cpu, GithubLogo, WifiSlash } from '@phosphor-icons/react'
+import { ArrowRight, Cloud, Cpu, GithubLogo, HardDrives, Robot, TreeStructure, WifiSlash } from '@phosphor-icons/react'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
@@ -32,13 +32,13 @@ export function OverviewPage() {
           {/* Named after the part of the brain that runs quick moves without
               asking the cortex: the headline says that in plain words. */}
           <div className="grid gap-3">
-            <p className="text-sm font-medium text-brand">Open-source layer for robots</p>
+            <p className="text-sm font-medium text-brand">Open-source layer for robot fleets</p>
             <h1 className="max-w-[18ch] text-3xl leading-[1.08] font-semibold tracking-tighter text-balance sm:text-4xl xl:text-5xl">
               Fast reflexes on the robot. A big brain in the cloud.
             </h1>
             {/* The problem, so the three lines below read as its answer. */}
             <p className="text-base leading-relaxed text-pretty text-muted-foreground sm:text-lg">
-              A robot can't wait two seconds for a cloud model on every move, or freeze when the Wi‑Fi drops.
+              A robot can't wait a second for a cloud model on every move, or freeze when the Wi‑Fi drops.
             </p>
           </div>
           <HowItWorks />
@@ -66,8 +66,57 @@ export function OverviewPage() {
 
       <SystemMap />
       <ActionClasses />
+      <BeyondTheDemo />
       <OpenSource />
     </div>
+  )
+}
+
+// What the fruit sorter stands for: Cerebellum is the layer, sorting is one use.
+const BEYOND: { icon: ReactNode; title: string; text: string }[] = [
+  {
+    icon: <Robot />,
+    title: 'Any robot that acts on what it sees',
+    text: 'You set the task, its options and how risky each action is.',
+  },
+  {
+    icon: <TreeStructure />,
+    title: 'A whole fleet on one server',
+    text: 'Each robot syncs with its own token. One journal and one cloud bill cover them all.',
+  },
+  {
+    icon: <HardDrives />,
+    title: 'Runs on your own stack',
+    text: `The agent on the robot, the server in Docker, any OpenAI-compatible model: Nemotron on ${CLOUD_PROVIDER} by default.`,
+  },
+]
+
+function BeyondTheDemo() {
+  return (
+    <section aria-labelledby="beyond-title" className="grid gap-6">
+      <div className="grid gap-1">
+        <h2 id="beyond-title" className="text-xl font-semibold tracking-tight">
+          Beyond this demo
+        </h2>
+        <p className="text-sm text-muted-foreground">The fruit sorter is one use of Cerebellum, not the product.</p>
+      </div>
+      <ul className="grid gap-6 sm:grid-cols-3">
+        {BEYOND.map((item) => (
+          <li key={item.title} className="grid content-start gap-3">
+            <span
+              aria-hidden
+              className="flex size-8 items-center justify-center rounded-md border border-border-strong bg-card text-brand [&>svg]:size-4"
+            >
+              {item.icon}
+            </span>
+            <div className="grid gap-1">
+              <h3 className="text-sm font-medium">{item.title}</h3>
+              <p className="text-sm leading-relaxed text-pretty text-muted-foreground">{item.text}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
@@ -144,7 +193,7 @@ function Figures() {
   const perThousand = (total: number) => `$${((total / f.decided) * 1000).toFixed(2)}`
   // Figures in the readout face; the last row is words.
   const rows: { label: string; cloud: string; ours: string; figure: boolean }[] = [
-    { label: 'Typical answer', cloud: duration(f.cloudTypical), ours: duration(f.typical), figure: true },
+    { label: 'Time to decide', cloud: duration(f.cloudTypical), ours: duration(f.typical), figure: true },
     {
       label: 'Cost of 1,000 decisions',
       cloud: perThousand(f.cloudOnly),
@@ -186,15 +235,16 @@ function Figures() {
         </tbody>
       </table>
       <figcaption className="text-xs text-muted-foreground">
-        Live from the demo robot's last {count(f.decided)} decisions
+        From the demo robot's latest {count(f.decided)} decisions
         {f.mistakes ? (
           <>
             , where the cloud{' '}
+            {/* Overruled or corrected: the journal's "Changed by the cloud". */}
             <Link
               to="/journal?show=changed"
               className="underline decoration-border-strong underline-offset-4 transition-colors hover:text-foreground hover:decoration-brand"
             >
-              caught {count(f.mistakes)} of its {f.mistakes === 1 ? 'mistake' : 'mistakes'}
+              changed {count(f.mistakes)} of its calls
             </Link>
           </>
         ) : null}
@@ -229,13 +279,15 @@ function LatestDecision() {
   }
 
   return (
-    <section aria-labelledby="latest-title" className="panel overflow-hidden">
+    <section aria-labelledby="latest-title" className="panel overflow-hidden lg:sticky lg:top-20">
       <div className="flex h-12 items-center justify-between gap-3 border-b px-4">
         <h2 id="latest-title" className="shrink-0 text-sm font-medium">
-          Live from the demo robot
+          {/* Live only while the newest decision is fresh. */}
+          {now - Date.parse(latest.decided_at) < STALE_MS ? 'Live from the demo robot' : 'Latest from the demo robot'}
         </h2>
         <p className="truncate text-sm text-muted-foreground">
-          {latest.device_name}, {timeAgo(latest.decided_at, now)}
+          <span className="max-sm:hidden">{latest.device_name}, </span>
+          {timeAgo(latest.decided_at, now)}
         </p>
       </div>
       {/* The frame sets the top row's height and the path gets a fixed one,
@@ -293,7 +345,7 @@ function PathBox({ children }: { children: ReactNode }) {
     return () => observer.disconnect()
   }, [children])
   return (
-    <div ref={ref} className={cn('h-36 overflow-hidden', overflows && 'mask-b-from-75%')}>
+    <div ref={ref} className={cn('h-44 overflow-hidden sm:h-36', overflows && 'mask-b-from-75%')}>
       {children}
     </div>
   )
@@ -303,11 +355,17 @@ function PathBox({ children }: { children: ReactNode }) {
  * The line under the outcome. Where the outcome already says "asking the
  * cloud" or "cancelled", it says what the robot's light showed instead.
  */
-function subtitleOf(d: Pick<Decision, 'status'>): string {
+function subtitleOf(d: Pick<Decision, 'status' | 'action'>): string {
   if (d.status === 'waiting_for_server') return `${LIGHT.amber.lit}: not sure`
   if (d.status === 'cancelled') return `${LIGHT.off.lit}: gave up waiting`
+  // A finished decision says what the light meant: "A person in the zone,
+  // the robot froze" tells a visitor more than "Done".
+  if (d.status === 'executed') return LIGHT[ledOf(d)].meaning
   return STATUS_LABEL[d.status]
 }
+
+/** How old the newest decision can be before the panel stops calling it live. */
+const STALE_MS = 2 * 60_000
 
 /** The latest decision's panel while it loads, in the same places. */
 function LatestDecisionSkeleton() {
@@ -325,7 +383,7 @@ function LatestDecisionSkeleton() {
             <Skeleton className="h-3.5 w-24" />
           </div>
         </div>
-        <div className="h-36">
+        <div className="h-44 sm:h-36">
           <TraceSkeleton />
         </div>
       </div>
