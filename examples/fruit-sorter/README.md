@@ -40,7 +40,7 @@ uv run fruit-sorter run
 uv run fruit-sorter run --pi        # on the Raspberry Pi
 ```
 
-The camera is found by itself (`--camera auto`, the default) and again after it is unplugged and plugged back, whatever number the system gives it; `--camera 1` or a video file pins one. `--zone x0,y0,x1,y1` sets the part of the frame (fractions) where items are looked for.
+The camera is found by itself (`--camera auto`, the default) and again after it is unplugged and plugged back, whatever number the system gives it; `--camera 1` or a video file pins one. `--zone x0,y0,x1,y1` sets the part of the frame (fractions) where items are looked for. `--preview 8080` serves what the robot sees (the zone and what the detector found drawn on it) at `http://<host>:8080`, to aim the camera; it has no password, so leave it off on a shared network.
 
 ## Run at boot on the Pi
 

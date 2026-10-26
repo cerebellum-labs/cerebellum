@@ -83,8 +83,11 @@ class ZonePresence:
         )
         if biggest is None:
             if learn_if_empty:
-                # Follows the light slowly; the shift already taken into account keeps it from lagging behind.
-                cv2.accumulateWeighted(gray, self._background, self._learn)
+                # Follows the light slowly; the shift already taken into account keeps it from lagging behind. Only
+                # where nothing changed: an item the zone could not take for one (a hand carrying it in) must not be
+                # learned into the scene, or taking it away would leave a ghost.
+                unchanged = (np.abs(diff) < self._threshold * 0.5).astype(np.uint8)
+                cv2.accumulateWeighted(gray, self._background, self._learn, mask=unchanged)
             return None
         x, y, w, h = cv2.boundingRect(biggest)
         if self._before_absorb is not None and self._looks_like(gray, self._before_absorb, (x, y, w, h)):
