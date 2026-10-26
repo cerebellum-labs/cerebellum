@@ -102,10 +102,13 @@ class ConsoleActuator:
 class ServoActuator:
     """The lever: left sweeps an item into the basket, right drops it off the edge into the bin."""
 
-    def __init__(self, pin: int, left: float = -50, right: float = 50, rest: float = 0) -> None:
+    def __init__(self, pin: int, left: float = -80, right: float = 80, rest: float = 5) -> None:
         from gpiozero import AngularServo
 
-        self._servo = AngularServo(pin, min_angle=-90, max_angle=90, initial_angle=rest)
+        # 0.5–2.4 ms is the SG90's whole travel; gpiozero's default 1–2 ms would make it half as wide.
+        self._servo = AngularServo(
+            pin, min_angle=-90, max_angle=90, initial_angle=rest, min_pulse_width=0.0005, max_pulse_width=0.0024
+        )
         self._angles = {"basket": left, "discard": right}
         self._rest = rest
         self._busy = threading.Lock()
@@ -120,9 +123,13 @@ class ServoActuator:
     def _sweep(self, action: str) -> None:
         with self._busy:
             self._servo.angle = self._angles[action]
-            time.sleep(0.7)
+            time.sleep(0.5)
+            # The pulses come from software and shift a little while the detector uses the CPU: held with them, the
+            # lever trembles. It stays where it is without them.
+            self._servo.detach()
+            time.sleep(1.2)
             self._servo.angle = self._rest
-            time.sleep(0.4)
+            time.sleep(0.5)
             self._servo.detach()
 
 

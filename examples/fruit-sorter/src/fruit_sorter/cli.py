@@ -16,9 +16,10 @@ from cerebellum import Cerebellum
 
 from .camera import Camera
 from .config import Config
-from .detector import MODEL_URL, YoloxDetector
+from .detector import MODEL_URL, Detector, YoloxDetector
 from .hardware import Actuator, Button, ConsoleActuator, ConsoleButton, LightPanel, NullDriver
 from .presence import ZonePresence
+from .preview import Preview, Previewed
 from .sim import SimDetector, SimWorld, render
 from .sorter import Sorter
 
@@ -28,7 +29,11 @@ RULES = {
     "tasks": {
         "sort_item": {
             "options": ["basket", "discard"],
-            "prompt": "Is the object in the photo a fruit? Answer basket if it is a fruit, discard otherwise.",
+            "prompt": (
+                "Look at the object in the photo itself: the detector's label can be wrong. Is it a fruit in the "
+                "everyday sense, the kind sold in the fruit section of a shop? Vegetables are not fruits. "
+                "Answer basket if it is a fruit, discard otherwise."
+            ),
         },
     },
     "actions": {
@@ -53,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--pi", action="store_true", help="drive the lights, servo and button on the Raspberry Pi's pins")
     run.add_argument("--zone", help="x0,y0,x1,y1 as fractions of the frame")
     run.add_argument("--fps", type=float, default=10)
+    run.add_argument("--preview", type=int, metavar="PORT", help="show what the robot sees at http://<this host>:PORT")
 
     sim = sub.add_parser("sim", help="play the demo's items on a made-up camera, with the real agent and server")
     sim.add_argument("--fast", action="store_true", help="shorter scenes")
@@ -133,7 +139,14 @@ def cmd_run(args: argparse.Namespace) -> int:
         actuator, button = ConsoleActuator(), ConsoleButton()
 
     agent = Cerebellum(RULES, db_path=args.db, device_metadata={"example": "fruit-sorter", "camera": f"{source}"})
-    sorter = Sorter(agent, YoloxDetector(args.model), ZonePresence(cfg.zone), lights, actuator, button, cfg)
+    presence = ZonePresence(cfg.zone)
+    detector: Detector = YoloxDetector(args.model)
+    preview = None
+    if args.preview:
+        preview = Preview(presence, args.preview)
+        detector = Previewed(detector, preview)
+        print(f"Preview at http://<this host>:{preview.port}", flush=True)
+    sorter = Sorter(agent, detector, presence, lights, actuator, button, cfg)
     sorter.attach()
     agent.start()
     stop = _stopper()
@@ -153,6 +166,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     finally:
         lights.off()
         camera.close()
+        if preview:
+            preview.close()
         agent.stop()
     return 0
 

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <title>Cerebellum</title>
+  <g transform="translate(12 12) scale(3.04)">
+    <rect width="25" height="25" rx="5" fill="#ec7a3c"/>
+    <circle cx="8" cy="8" r="3" fill="#1a0c04"/>
+    <circle cx="17" cy="8" r="3" fill="#1a0c04"/>
+    <circle cx="8" cy="17" r="3" fill="#1a0c04"/>
+    <circle cx="17" cy="17" r="3" fill="#1a0c04"/>
+  </g>
+</svg>

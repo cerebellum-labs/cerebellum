@@ -104,3 +104,16 @@ def test_an_item_is_still_found_beside_a_shadow():
     frame = with_item(blob(0, 20, 30, 200))
     item = zone.update(frame)
     assert item is not None and 100 <= item.box[0] <= 130 and item.box[2] <= 210
+
+
+def test_an_item_carried_in_by_a_hand_leaves_no_ghost_when_taken_away():
+    # While the arm touches the edge of the zone nothing counts as an item; that must not teach the scene the item.
+    zone = ZonePresence(ZONE)
+    zone.update(scene())
+    carried = with_item(scene())
+    carried[110:130, 0:120] = 250  # the arm
+    for _ in range(15):
+        assert zone.update(carried) is None
+    assert zone.update(with_item(scene())) is not None  # the arm let go: the item itself
+    for _ in range(5):
+        assert zone.update(scene()) is None  # taken away
