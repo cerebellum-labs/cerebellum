@@ -5,7 +5,7 @@ Cerebellum's own code is under the [MIT License](LICENSE). It uses the component
 | Component | How | License or terms |
 | --- | --- | --- |
 | NVIDIA Nemotron | Called through the Nebius Token Factory API, not downloaded | [NVIDIA Open Model License](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/) |
-| Nebius Token Factory, Nebius AI Cloud | Hosted services | [Nebius legal terms](https://docs.nebius.com/legal) |
+| Nebius Token Factory | Hosted service | [Nebius legal terms](https://docs.nebius.com/legal) |
 | YOLOX-Nano | Object detector of the fruit sorter example, run on the device through ONNX Runtime; weights are downloaded by `fruit-sorter download-model`, not stored here | [Apache License 2.0](https://github.com/Megvii-BaseDetection/YOLOX/blob/main/LICENSE) |
 | COCO | The dataset YOLOX was trained on; only its 80 class names are used | Annotations under [CC BY 4.0](https://cocodataset.org/#termsofuse) |
 | Pillow | Python library of the agent: shrinks camera frames | [MIT-CMU](https://github.com/python-pillow/Pillow/blob/main/LICENSE) (permissive, like MIT) |

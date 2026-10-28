@@ -20,7 +20,7 @@ CEREBELLUM_TOKEN=<the device token>
 
 ## Authentication
 
-1. In the dashboard, open **Devices → Add device**, sign in with the dashboard password and give the device a name and a key like `fruit-sorter-1`.
+1. In the dashboard, open **Robots**, sign in with the dashboard password, click **Add robot** and give it a name and a key like `fruit-sorter-1`.
 2. The dashboard shows the device token once. Put it on the robot as `CEREBELLUM_TOKEN`; the server keeps only its SHA-256.
 3. Send it with every request: `Authorization: Bearer <token>`.
 

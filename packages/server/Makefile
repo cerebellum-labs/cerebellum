@@ -15,10 +15,13 @@ LOCAL_DATABASE_URL := postgres://postgres@localhost:5432/postgres?sslmode=disabl
 .PHONY: run build test test-integration lint sqlc-diff generate db fmt tidy clean docker release
 
 # Runs against the database from `make db` unless DATABASE_URL is set, with
-# a dashboard password and session secret for local development only.
+# a dashboard password and session secret for local development only. The
+# dashboard's dev server proxies the API with the server's own Host but keeps
+# its page's Origin, so its origin is allowed too.
 run: export DATABASE_URL ?= $(LOCAL_DATABASE_URL)
 run: export ADMIN_PASSWORD ?= admin
 run: export SESSION_SECRET ?= local-development-only-session-secret
+run: export DASHBOARD_ORIGIN ?= http://localhost:5173
 run:
 	go run ./cmd/server
 
