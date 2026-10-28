@@ -107,7 +107,10 @@ jobs:
     needs: [check, server]
     # Signed build provenance, verifiable with `gh attestation verify`.
     # GitHub offers attestations to public repositories, so a private copy of
-    # this repository skips the step.
+    # this repository skips the step. GitHub keeps the attestation; pushed to
+    # GHCR too, it would show on the package page as its newest version,
+    # tagged sha256-…. Without the push there is no storage record for the
+    # organization's linked artifacts page either.
     if: >-
       always()
       && needs.check.result == 'success'
@@ -117,20 +120,15 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      packages: write
       id-token: write
       attestations: write
     steps:
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ needs.check.outputs.image }}
           subject-digest: ${{ needs.server.outputs.digest || needs.check.outputs.digest }}
-          push-to-registry: true
+          push-to-registry: false
+          create-storage-record: false
 
   release:
     name: GitHub release
