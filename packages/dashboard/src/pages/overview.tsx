@@ -29,12 +29,12 @@ export function OverviewPage() {
     <div className="grid gap-14 sm:gap-16">
       <header className="grid items-start gap-10 pt-2 sm:pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-12 xl:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] xl:gap-16">
         <div className="grid max-w-[36rem] content-start gap-7 lg:pt-4">
-          {/* Named after the part of the brain that runs quick moves without
-              asking the cortex: the headline says that in plain words. */}
+          {/* What the README and the link preview say, so a shared link and
+              the page say one thing; the line below is the problem. */}
           <div className="grid gap-3">
-            <p className="text-sm font-medium text-brand">Open-source layer for robot fleets</p>
+            <p className="text-sm font-medium text-brand">Open source, MIT licensed</p>
             <h1 className="max-w-[18ch] text-3xl leading-[1.08] font-semibold tracking-tighter text-balance sm:text-4xl xl:text-5xl">
-              Fast reflexes on the robot. A big brain in the cloud.
+              The decision layer for robot fleets.
             </h1>
             {/* The problem, so the three lines below read as its answer. */}
             <p className="text-base leading-relaxed text-pretty text-muted-foreground sm:text-lg">

@@ -1,3 +1,14 @@
-# An operator dashboard, not a site for search engines.
+# An operator dashboard, not a site for search engines: they may not crawl
+# it. Link previews in chats and social posts still need the page's meta
+# tags, and most of these bots honour robots.txt, so they may fetch it.
+# _headers adds noindex for any crawler that reaches a page anyway.
+User-agent: Twitterbot
+User-agent: LinkedInBot
+User-agent: Slackbot-LinkExpanding
+User-agent: facebookexternalhit
+User-agent: Discordbot
+User-agent: TelegramBot
+Allow: /
+
 User-agent: *
 Disallow: /

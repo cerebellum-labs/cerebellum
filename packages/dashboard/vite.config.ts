@@ -11,8 +11,11 @@ export default defineConfig({
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
   server: {
-    // In development the page and the API share this origin: /api goes to
-    // the server (make db run in packages/server), the WebSocket included.
+    // In development the page and the API share this origin in the browser:
+    // /api goes to the server (make db run in packages/server), the WebSocket
+    // included. The server still sees the page's Origin, and `make run`
+    // allows http://localhost:5173 only, so the port must not move.
+    strictPort: true,
     proxy: {
       // changeOrigin sends the target's own Host, so a deployed API behind
       // Cloudflare answers too.
