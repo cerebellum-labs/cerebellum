@@ -4,6 +4,8 @@ All notable changes to the Cerebellum server are listed here, in the [Keep a Cha
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-28
+
 ### Added
 
 - Health check at `/health`, JSON errors, `X-Request-ID` on every response, 5 MB request body limit.
@@ -20,4 +22,5 @@ All notable changes to the Cerebellum server are listed here, in the [Keep a Cha
 
 - AGENT_API.md: a timeout, a 5xx or no network is no longer a failed attempt of an irreversible decision; it waits for the network, and only a `retry: true` answer counts. Documentation only: the server keeps no attempts.
 
-[Unreleased]: https://github.com/cerebellum-labs/cerebellum/commits/main/packages/server
+[Unreleased]: https://github.com/cerebellum-labs/cerebellum/compare/server/v0.1.0...HEAD
+[0.1.0]: https://github.com/cerebellum-labs/cerebellum/releases/tag/server/v0.1.0
